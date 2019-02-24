@@ -1,8 +1,8 @@
 # Shellaro
 
-A minimalist terminal interface for mpg321 written in bash, based on fff
+A terminal music player written in bash, based on [fff](https://github.com/dylanaraps/fff)
 
-- quickly navigation
+- quick navigation
 - play a song, play all, or shuffle with a single keypress
 - vim keybindings
 - directory shortcuts
@@ -12,7 +12,7 @@ A minimalist terminal interface for mpg321 written in bash, based on fff
 ## Dependencies
 
 - bash
-- mpg321
+- [mpg321](http://mpg321.sourceforge.net/)
 
 ## Usage
 
@@ -73,4 +73,4 @@ the **$SHELLARO_FAV** variables are used to set the paths for directory shortcut
 
 ## Where did the name come from?
 
-Shellaro is a combinaton of "shell" (in reference to bash) & "Collaro" (an old phonograph manufacturer)
+Shellaro is a combinaton of "shell" (in reference to bash) & "[Collaro](https://en.wikipedia.org/wiki/Collaro)" (an old phonograph manufacturer)
