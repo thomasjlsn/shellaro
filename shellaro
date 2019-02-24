@@ -595,19 +595,41 @@ key() {
         ;;
 
         # Volume Up
-        "${SHELLARO_VOL_UP:=+}")
+        "${SHELLARO_VOL_UP1:=u}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
             redraw
         ;;
 
         # Volume Down
-        "${SHELLARO_VOL_DOWN:=-}")
+        "${SHELLARO_VOL_DOWN1:=d}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
             redraw
         ;;
 
         # Set Volume
-        "${SHELLARO_SET_VOLUME:=v}")
+        "${SHELLARO_SET_VOLUME1:=v}")
+            cmd_line "Set Volume [0-100]: "
+            # if cmd_reply is between 0 & 100
+            if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
+                2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
+            fi
+            redraw
+        ;;
+
+        # Volume Up
+        "${SHELLARO_VOL_UP2:=+}")
+            2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
+            redraw
+        ;;
+
+        # Volume Down
+        "${SHELLARO_VOL_DOWN2:=-}")
+            2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
+            redraw
+        ;;
+
+        # Set Volume
+        "${SHELLARO_SET_VOLUME2:==}")
             cmd_line "Set Volume [0-100]: "
             # if cmd_reply is between 0 & 100
             if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
@@ -654,7 +676,7 @@ key() {
         ;;
 
         # Quit
-        q)
+        q|Q)
             clear
             exit
         ;;
