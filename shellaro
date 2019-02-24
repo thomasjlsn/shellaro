@@ -87,7 +87,12 @@ get_ls_colors() {
 
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
-    PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}"
+
+    if [[ -n "$(pgrep mpg321)" ]]; then
+        PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/} ▶ "
+    else
+        PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/} ■ "
+    fi
 
     printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
