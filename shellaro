@@ -1,0 +1,699 @@
+#!/usr/bin/env bash
+#
+# shellaro -- a terminal music player
+
+# CONFIG
+MUSIC_DIRECTORY=~/Music
+
+SHELLARO_FAV1=~/Music/LedZeppelin
+SHELLARO_FAV2=~/Music/SlightlyStoopid
+SHELLARO_FAV3=~/Music/Sublime
+SHELLARO_FAV4=~/Music/TheDoors
+SHELLARO_FAV5=~/Music/TheRollingStones
+SHELLARO_FAV6=~/Music/TheWho
+SHELLARO_FAV7=~/Music/
+SHELLARO_FAV8=~/Music/
+SHELLARO_FAV9=~/Music/
+
+#
+setup_terminal() {
+    printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
+
+    # Hide input
+    stty -echo
+}
+
+reset_terminal() {
+    printf '\e[?7h\e[?25h\e[2J\e[;r'
+
+    # Show input
+    stty echo
+}
+
+clear_screen() {
+    printf '\e[%sH\e[9999C\e[1J%b\e[1;%sr' \
+           "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
+}
+
+setup_options() {
+    # Format for normal files
+    [[ $SHELLARO_FILE_FORMAT == *%f* ]] && {
+        file_pre="${SHELLARO_FILE_FORMAT/'%f'*}"
+        file_post="${SHELLARO_FILE_FORMAT/*'%f'}"
+    }
+
+    # Format for marked files
+    [[ $SHELLARO_MARK_FORMAT == *%f* ]] && {
+        mark_pre="${SHELLARO_MARK_FORMAT/'%f'*}"
+        mark_post="${SHELLARO_MARK_FORMAT/*'%f'}"
+    }
+}
+
+get_term_size() {
+    read -r LINES COLUMNS < <(stty size)
+
+    # Max list items that fit in the scroll area
+    ((max_items=LINES-3))
+}
+
+get_ls_colors() {
+    [[ -z $LS_COLORS ]] && {
+        SHELLARO_LS_COLORS=0
+        return
+    }
+
+    # Turn $LS_COLORS into an array
+    IFS=: read -ra ls_cols <<< "$LS_COLORS"
+
+    for ((i=0;i<${#ls_cols[@]};i++)); {
+        [[ ${ls_cols[i]} =~ ^\*[^\.] ]] &&
+            ls_patterns+="${ls_cols[i]/=*}|"
+
+        [[ ${ls_cols[i]} =~ ^(\*|\.) ]] && {
+            ls_cols[i]="${ls_cols[i]#\*}"
+            ls_cols[i]="ls_${ls_cols[i]#.}"
+        }
+    }
+
+    # Strip non-ascii characters
+    ls_cols=("${ls_cols[@]//[^a-zA-Z0-9=\\;]/_}")
+
+    # Store the patterns in a '|' separated string
+    ls_patterns="${ls_patterns//\*}"
+    ls_patterns="${ls_patterns%?}"
+
+    export "${ls_cols[@]}" &>/dev/null
+}
+
+status_line() {
+    local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
+    PWD_status_line="${PWD##*/}"
+
+    printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+           "$((LINES-1))" \
+           "${SHELLARO_COL2:-7}" \
+           "${PWD_status_line:-/}" \
+           "${marked_files[*]:+${mark_ui}}"
+}
+
+read_dir() {
+    local dirs=()
+    local files=()
+    local item_index
+
+    for item in "$PWD"/*; do
+        if [[ -d $item ]]; then
+            dirs+=("$item")
+            ((item_index++))
+
+            [[ $item == "$OLDPWD" ]] &&
+                ((previous_index=item_index))
+        else
+            files+=("$item")
+        fi
+    done
+
+    list=("${dirs[@]}" "${files[@]}")
+
+    [[ -z ${list[0]} ]] &&
+        list[0]="empty"
+
+    ((list_total=${#list[@]}-1))
+
+    # Save the original dir in a second list as a backup
+    cur_list=("${list[@]}")
+}
+
+format_status_line() {
+    local file_name="${list[$1]##*/}"
+    local file_ext="${file_name##*.}"
+    local format
+    local suffix
+
+    # If the dir is empty, return
+    if [[ -z ${list[$1]} ]]; then
+        return
+
+    elif [[ -d ${list[$1]} ]]; then
+        format+="\\e[${di:-1;3${SHELLARO_COL1:-2}}m"
+        suffix+='/'
+
+    # 'BASH_REMATCH' is an array that stores each REGEX match
+    elif [[ $SHELLARO_LS_COLORS == 1 &&
+            $ls_patterns &&
+            $file_name =~ ($ls_patterns)$ ]]; then
+        match="${BASH_REMATCH[0]}"
+        file_ext="ls_${match//[^a-zA-Z0-9=\\;]/_}"
+        format+="\\e[${!file_ext:-${fi:-37}}m"
+
+    # Color files based on file extension and LS_COLORS
+    elif [[ $SHELLARO_LS_COLORS == 1 &&
+            $file_ext != "$file_name" &&
+            $file_ext =~ ^[a-zA-Z0-9_]*$ ]]; then
+        file_ext="ls_${file_ext}"
+        format+="\\e[${!file_ext:-${fi:-37}}m"
+
+    else
+        format+="\\e[${fi:-37}m"
+    fi
+
+    # If the item is under the cursor
+    (($1 == scroll)) &&
+        format+="\\e[1;3${SHELLARO_COL4:-7};7m"
+
+    # If the item is marked
+    [[ ${marked_files[$1]} == "${list[$1]:-null}" ]] && {
+        format+="\\e[3${SHELLARO_COL3:-3}m› "
+    }
+
+    # Escape the directory string
+    file_name="${file_name//[^[:print:]]/^[}"
+
+    printf '\r%b%s\e[m\r' "$format" "${file_name}${suffix}"
+}
+
+draw_dir() {
+    # Print the max directory items that fit in the scroll area
+    local scroll_start="$scroll"
+    local scroll_new_pos
+    local scroll_end
+
+    # When going up the directory tree, place the cursor on the position
+    # of the previous directory
+    ((find_previous == 1)) && {
+        ((scroll_start=previous_index-1))
+        ((scroll=scroll_start))
+
+        find_previous=
+    }
+
+    # If current dir is near the top of the list, keep scroll position
+    if ((list_total < max_items || scroll < max_items/2)); then
+        ((scroll_start=0))
+        ((scroll_end=max_items))
+        ((scroll_new_pos=scroll + 1))
+
+    # If curent dir is near the end of the list, keep scroll position
+    elif ((list_total - scroll < max_items/2)); then
+        ((scroll_start=list_total - max_items + 1))
+        ((scroll_new_pos=max_items - (list_total-scroll)))
+        ((scroll_end=list_total+1))
+
+    # If current dir is somewhere in the middle, center scroll position
+    else
+        ((scroll_start=scroll-max_items/2))
+        ((scroll_end=scroll_start+max_items))
+        ((scroll_new_pos=max_items/2+1))
+    fi
+
+    # Reset cursor position
+    printf '\e[H'
+
+    for ((i=scroll_start;i<scroll_end;i++)); {
+        # Don't print one too many newlines
+        ((i > scroll_start)) &&
+            printf '\n'
+
+        format_status_line "$i"
+    }
+
+    # Move the cursor to its new position if it changed
+    printf '\e[%sH' "$scroll_new_pos"
+    ((y=scroll_new_pos))
+}
+
+redraw() {
+    [[ $1 == full ]] && {
+        read_dir
+        scroll=0
+    }
+
+    clear_screen
+    draw_dir
+    status_line
+}
+
+mark() {
+    # Mark file for operation
+    # If an item is marked in a second directory,
+    # clear the marked files
+    [[ $PWD != "$mark_dir" ]] &&
+        marked_files=()
+
+    [[ ${list[0]} == empty && -z ${list[1]} ]] &&
+        return
+
+    if [[ $1 == all ]]; then
+        if ((${#marked_files[@]} != ${#list[@]})); then
+            marked_files=("${list[@]}")
+            mark_dir="$PWD"
+        else
+            marked_files=()
+        fi
+
+        redraw
+    else
+        if [[ ${marked_files[$1]} == "${list[$1]}" ]]; then
+            unset 'marked_files[scroll]'
+
+        else
+            marked_files[$1]="${list[$1]}"
+            mark_dir="$PWD"
+        fi
+
+        # Clear line before changing it
+        printf '\e[K'
+        format_status_line "$1"
+    fi
+
+    case "$2" in
+        " ") file_program=(play) ;;
+    esac
+
+    status_line
+}
+
+play() {
+    2>/dev/null 1>&2 mpg321 &
+}
+
+open() {
+    if [[ -d $1/ ]]; then
+        search=
+        search_end_early=
+        previous_dir="$PWD"
+        cd "${1:-/}" ||:
+        redraw full
+
+    elif [[ -f $1 ]]; then
+        # Figure out file type
+        # mime_type="$(file "-${file_flags:-biL}" "$1")"
+        nohup "${SHELLARO_OPENER:-${opener:-xdg-open}}" "$1" &>/dev/null &
+        disown
+    fi
+}
+
+cmd_line() {
+    cmd_reply=
+
+    printf '\e7\e[%sH\e[?25h' "$LINES"
+
+    while IFS= read -rsn 1 -p $'\r\e[K'"${1}${cmd_reply}" read_reply; do
+        case "$read_reply" in
+            # Backspace
+            $'\177'|$'\b')
+                cmd_reply="${cmd_reply%?}"
+
+                # Clear tab-completion
+                unset comp c
+            ;;
+
+            # Tab
+            $'\t')
+                comp_glob="$cmd_reply*"
+
+                # Pass the argument dirs to limit completion to directories
+                [[ $2 == dirs ]] &&
+                    comp_glob="$cmd_reply*/"
+
+                # Generate a completion list once
+                [[ -z ${comp[0]} ]] &&
+                    IFS=$'\n' read -d "" -ra comp < <(compgen -G "$comp_glob")
+
+                # On each tab press, cycle through the completion list
+                [[ -n ${comp[c]} ]] && {
+                    cmd_reply="${comp[c]}"
+                    ((c=c >= ${#comp[@]}-1 ? 0 : ++c))
+                }
+            ;;
+
+            # Escape / Custom 'no' value (used as a replacement for '-n 1')
+            $'\e'|"${3:-null}")
+                cmd_reply=
+                break
+            ;;
+
+            # Enter/Return
+            "")
+                # If there's only one search result and its a directory,
+                # enter it on one enter keypress
+                [[ $2 == search && -d ${list[0]} ]] && ((list_total == 0)) && {
+                    # '\e[?25l': Hide the cursor
+                    printf '\e[?25l'
+
+                    open "${list[0]}"
+                    search_end_early=1
+
+                    # Unset tab completion variables since we're done
+                    unset comp c
+                    return
+                }
+
+                break
+            ;;
+
+            # Custom 'yes' value (used as a replacement for '-n 1')
+            "${2:-null}")
+                cmd_reply="$read_reply"
+                break
+            ;;
+
+            # Anything else, add it to read reply
+            " "|*)
+                cmd_reply+="$read_reply"
+
+                # Clear tab-completion
+                unset comp c
+            ;;
+        esac
+
+        # Search on keypress if search passed as an argument
+        [[ $2 == search ]] && {
+            # '\e[?25l': Hide the cursor
+            printf '\e[?25l'
+
+            # Use a greedy glob to search
+            list=("$PWD"/*"$cmd_reply"*)
+            ((list_total=${#list[@]}-1))
+
+            # Draw the search results on screen
+            scroll=0
+            redraw
+
+            # '\e[%sH':  Move cursor back to cmd-line
+            # '\e[?25h': Unhide the cursor
+            printf '\e[%sH\e[?25h' "$LINES"
+        }
+    done
+
+    # Unset tab completion
+    unset comp c
+
+    printf '\e[2K\e[?25l\e8'
+}
+
+key() {
+    case "$1" in
+
+        # Execute command
+        "${SHELLARO_COMMAND:=:}")
+            cmd_line ":"
+
+            # Quit
+            if [[ "$cmd_reply" == "q" ]]; then
+                clear
+                exit
+            fi
+
+            # Play All in PWD
+            if [[ "$cmd_reply" == "all" ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
+            fi
+
+            # Play All in $MUSIC_DIRECTORY
+            if [[ "$cmd_reply" == "ALL" ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet &
+            fi
+
+            # Kill mpg321
+            if [[ "$cmd_reply" == "kill" ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+            fi
+
+            # Shuffle All in PWD
+            if [[ "$cmd_reply" == "shuffle" ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
+            fi
+
+            # Shuffle All in $MUSIC_DIRECTORY
+            if [[ "$cmd_reply" == "SHUFFLE" ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            fi
+
+        ;;
+
+        # Open dir / Play song
+        "${SHELLARO_CHILD1:=l}"|\
+        "${SHELLARO_CHILD2:=C}"|\
+        "${SHELLARO_CHILD3:=""}")
+            if [[ ${list[scroll]} == *.mp3 ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+            elif [[ -d ${list[scroll]} ]]; then
+                open "${list[scroll]}"
+            else
+                :
+            fi
+            redraw
+        ;;
+
+        # Go to the parent directory
+        "${SHELLARO_PARENT1:=h}"|\
+        "${SHELLARO_PARENT2:=D}"|\
+        "${SHELLARO_PARENT3:=$'\177'}"|\
+        "${SHELLARO_PARENT4:=$'\b'}")
+            # If a search was done, clear the results and open the current dir
+            if ((search == 1 && search_end_early != 1)); then
+                open "$PWD"
+
+            # If '$PWD' is not $MUSIC_DIRECTORY or a subdirectory
+            # of, don't go to parent
+            elif [[ "$PWD" = *"$MUSIC_DIRECTORY/"* ]]; then
+                find_previous=1
+                open "${PWD%/*}"
+            fi
+        ;;
+
+        # Scroll down
+        "${SHELLARO_SCROLL_DOWN1:=j}"|\
+        "${SHELLARO_SCROLL_DOWN2:=B}")
+            ((scroll < list_total)) && {
+                ((scroll++))
+                ((y < max_items )) && ((y++))
+
+                format_status_line "$((scroll-1))"
+                printf '\n'
+                format_status_line "$scroll"
+                status_line
+            }
+        ;;
+
+        # Scroll up
+        "${SHELLARO_SCROLL_UP1:=k}"|\
+        "${SHELLARO_SCROLL_UP2:=A}")
+            ((scroll > 0)) && {
+                ((scroll--))
+
+                format_status_line "$((scroll+1))"
+
+                if ((y < 2)); then
+                    printf '\e[1L'
+                else
+                    printf '\e[A'
+                    ((y--))
+                fi
+
+                format_status_line "$scroll"
+                status_line
+
+            }
+        ;;
+
+        # Go to top
+        "${SHELLARO_TO_TOP:=g}")
+            ((scroll != 0)) && {
+                ((scroll=0))
+                redraw
+            }
+        ;;
+
+        # Go to bottom
+        "${SHELLARO_TO_BOTTOM:=G}")
+            ((scroll != list_total)) && {
+                ((scroll=list_total))
+                redraw
+            }
+        ;;
+
+        # Search
+        "${SHELLARO_SEARCH:=/}")
+            cmd_line "/" "search"
+
+            # If the search came up empty, redraw the current dir
+            if [[ -z ${list[*]} || -z $cmd_reply ]]; then
+                list=("${cur_list[@]}")
+                ((list_total=${#list[@]}-1))
+                redraw
+                search=
+            else
+                search=1
+            fi
+        ;;
+
+        # Mark songs to play
+        "${SHELLARO_MARK_SONG:=" "}")
+            mark "$scroll" "$1"
+            # Scroll down one item when a file is selected
+            ((scroll < list_total)) && {
+                ((scroll++))
+                ((y < max_items )) && ((y++))
+
+                format_status_line "$((scroll-1))"
+                printf '\n'
+                format_status_line "$scroll"
+                status_line
+            }
+
+        ;;
+
+        # Clear selection
+        "${SHELLARO_CLEAR:=x}")
+            marked_files=()
+            redraw
+        ;;
+
+        # Play selection / Execute file operation
+        "${SHELLARO_PLAY:=p}")
+            [[ ${marked_files[*]} ]] && {
+                cd "$PWD" && "${file_program[@]}" "${marked_files[@]}" .
+                marked_files=()
+                redraw full
+            }
+        ;;
+
+        # Go to $MUSIC_DIRECTORY
+        "${SHELLARO_GO_HOME1:=\`}"|\
+        "${SHELLARO_GO_HOME2:=0}"|\
+        "${SHELLARO_GO_HOME3:=~}")
+            open "$MUSIC_DIRECTORY"
+        ;;
+
+        # Play All In PWD
+        "${SHELLARO_PLAY_ALL:=a}")
+            2>/dev/null 1>&2 killall -15 mpg321
+            2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
+            clear_screen
+            redraw
+        ;;
+
+        # Shuffle All In PWD
+        "${SHELLARO_SHUFFLE:=s}")
+            2>/dev/null 1>&2 killall -15 mpg321
+            2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
+            clear_screen
+            redraw
+        ;;
+
+        # Volume Up
+        "${SHELLARO_VOL_UP:=+}")
+            2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
+        ;;
+
+        # Volume Down
+        "${SHELLARO_VOL_DOWN:=-}")
+            2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
+        ;;
+
+        # Set Volume
+        "${SHELLARO_SET_VOLUME:=v}")
+            cmd_line "Set Volume [0-100]: "
+            # if cmd_reply is between 0 & 100
+            if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
+                2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
+            fi
+        ;;
+
+        # Mute / Unmute
+        "${SHELLARO_TOGGLE_MUTE:=m}")
+            2>/dev/null 1>&2 amixer -D pulse sset Master toggle
+        ;;
+
+        # Jump To Favs
+        [1-9])
+            favorite="SHELLARO_FAV${1}"
+            favorite="${!favorite}"
+
+            [[ $favorite ]] &&
+                open "$favorite"
+        ;;
+
+        # Kill mpg321
+        "${SHELLARO_KILL:=K}")
+            2>/dev/null 1>&2 killall -15 mpg321
+            clear_screen
+            redraw
+        ;;
+
+        # Redraw, useful when bugs appear!
+        "${SHELLARO_RELOAD_DIR:=R}")
+            clear_screen
+            redraw full
+        ;;
+
+        # Create a new instance of the program
+        # and exit the current instance (for testing)
+        "${SHELLARO_RESTART:=&}")
+            clear_screen
+            echo "RESTARTING"
+            sleep .2
+            ~/GitHub/shellaro/shellaro "$0" && exit
+        ;;
+
+        # Quit
+        q)
+            clear
+            exit
+        ;;
+    esac
+}
+
+main() {
+    # Do nothing if cd fails
+    cd "${2:-$1}" &>/dev/null ||:
+
+    [[ $1 == -v ]] && {
+        printf '%s\n' "shellaro 0.1"
+        exit
+    }
+
+    # bash 5 and some versions of bash 4 don't allow SIGWINCH to interrupt
+    # a 'read' command and instead wait for it to complete. In this case it
+    # causes the window to not redraw on resize until the user has pressed
+    # a key (causing the read to finish). This sets a read timeout on the
+    # affected versions of bash
+    ((BASH_VERSINFO[0] > 3)) &&
+        read_flags=(-t 0.05)
+
+    ((${SHELLARO_LS_COLORS:=1} == 1)) &&
+        get_ls_colors
+
+    # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
+    # 'nullglob':   Don't expand non-matching globs to themselves
+    shopt -s nocaseglob nullglob
+
+    # Trap the exit signal (we need to reset the terminal to a useable state.)
+    trap 'reset_terminal' EXIT
+
+    # Trap the window resize signal (handle window resize events)
+    trap 'get_term_size; redraw' WINCH
+
+    get_term_size
+    setup_terminal
+    redraw full
+
+    # Vintage infinite loop.
+    for ((;;)); {
+        read "${read_flags[@]}" -srn 1 && key "$REPLY"
+
+        # Exit if there is no longer a terminal attached
+        [[ -t 1 ]] || exit 1
+    }
+}
+
+open "$MUSIC_DIRECTORY"
+setup_options
+main "$@"
