@@ -13,6 +13,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 
 - bash
 - [mpg321](http://mpg321.sourceforge.net/)
+- pgrep
 
 ## Usage
 

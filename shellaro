@@ -4,7 +4,6 @@
 
 # CONFIG
 MUSIC_DIRECTORY=~/Music
-
 SHELLARO_FAV1=~/Music/LedZeppelin
 SHELLARO_FAV2=~/Music/SlightlyStoopid
 SHELLARO_FAV3=~/Music/Sublime
@@ -15,7 +14,6 @@ SHELLARO_FAV7=~/Music/
 SHELLARO_FAV8=~/Music/
 SHELLARO_FAV9=~/Music/
 
-#
 setup_terminal() {
     printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
 
@@ -88,10 +86,19 @@ get_ls_colors() {
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
 
-    if [[ -n "$(pgrep mpg321)" ]]; then
-        PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/} ▶ "
+    # if volume is muted, strike through the volume in status line
+    if [[ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]]; then
+        if [[ -n "$(pgrep mpg321)" ]]; then
+            PWD_status_line="▷ MUTE ${PWD##*/}  "
+        else
+            PWD_status_line="□ MUTE ${PWD##*/}  "
+        fi
     else
-        PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/} ■ "
+        if [[ -n "$(pgrep mpg321)" ]]; then
+            PWD_status_line="▶ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}  "
+        else
+            PWD_status_line="■ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}  "
+        fi
     fi
 
     printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
@@ -646,6 +653,7 @@ key() {
         # Mute / Unmute
         "${SHELLARO_TOGGLE_MUTE:=m}")
             2>/dev/null 1>&2 amixer -D pulse sset Master toggle
+            redraw
         ;;
 
         # Jump To Favs
