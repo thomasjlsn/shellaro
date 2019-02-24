@@ -567,7 +567,7 @@ key() {
         ;;
 
         # Play selection / Execute file operation
-        "${SHELLARO_PLAY:=p}")
+        "${SHELLARO_DO:=p}")
             [[ ${marked_files[*]} ]] && {
                 cd "$PWD" && "${file_program[@]}" "${marked_files[@]}" .
                 marked_files=()
@@ -583,17 +583,39 @@ key() {
         ;;
 
         # Play All In PWD
-        "${SHELLARO_PLAY_ALL:=a}")
-            2>/dev/null 1>&2 killall -15 mpg321
-            2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
+        "${SHELLARO_PLAY:=a}")
+            if [[ -d ${list[scroll]} ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+            elif [[ -f ${list[scroll]} ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
+            else
+                return
+            fi
             clear_screen
             redraw
         ;;
 
         # Shuffle All In PWD
         "${SHELLARO_SHUFFLE:=s}")
+            if [[ -d ${list[scroll]} ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
+            elif [[ -f ${list[scroll]} ]]; then
+                2>/dev/null 1>&2 killall -15 mpg321
+                2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
+            else
+                return
+            fi
+            clear_screen
+            redraw
+        ;;
+
+        # Shuffle All In $MUSIC_DIRECTORY
+        "${SHELLARO_SHUFFLE_ALL:=S}")
             2>/dev/null 1>&2 killall -15 mpg321
-            2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
+            2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
             clear_screen
             redraw
         ;;
