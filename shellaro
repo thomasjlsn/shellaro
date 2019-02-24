@@ -409,11 +409,13 @@ key() {
         # Open dir / Play song
         "${SHELLARO_CHILD1:=l}"|\
         "${SHELLARO_CHILD2:=C}"|\
-        "${SHELLARO_CHILD3:=""}")
+        "${SHELLARO_CHILD3:=$'\eOC'}"|\
+        "${SHELLARO_CHILD4:=$'\e[C'}"|\
+        "${SHELLARO_CHILD5:=""}")
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 2>/dev/null 1>&2 killall -15 mpg321
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
-                sleep 0.05
+                sleep 0.03
                 clear_screen
                 redraw
             elif [[ -d ${list[scroll]} ]]; then
@@ -428,7 +430,9 @@ key() {
         "${SHELLARO_PARENT1:=h}"|\
         "${SHELLARO_PARENT2:=D}"|\
         "${SHELLARO_PARENT3:=$'\177'}"|\
-        "${SHELLARO_PARENT4:=$'\b'}")
+        "${SHELLARO_PARENT4:=$'\eOD'}"|\
+        "${SHELLARO_PARENT5:=$'\e[D'}"|\
+        "${SHELLARO_PARENT6:=$'\b'}")
             # If a search was done, clear the results and open the current dir
             if ((search == 1 && search_end_early != 1)); then
                 open "$PWD"
@@ -443,7 +447,9 @@ key() {
 
         # Scroll down
         "${SHELLARO_SCROLL_DOWN1:=j}"|\
-        "${SHELLARO_SCROLL_DOWN2:=B}")
+        "${SHELLARO_SCROLL_DOWN2:=$'\eOB'}"|\
+        "${SHELLARO_SCROLL_DOWN3:=$'\e[B'}"|\
+        "${SHELLARO_SCROLL_DOWN4:=B}")
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
@@ -457,6 +463,8 @@ key() {
 
         # Scroll up
         "${SHELLARO_SCROLL_UP1:=k}"|\
+        "${SHELLARO_SCROLL_UP1:=$'\eOA'}"|\
+        "${SHELLARO_SCROLL_UP1:=$'\e[A'}"|\
         "${SHELLARO_SCROLL_UP2:=A}")
             ((scroll > 0)) && {
                 ((scroll--))
@@ -556,7 +564,7 @@ key() {
             else
                 return
             fi
-            sleep 0.05
+            sleep 0.03
             clear_screen
             redraw
         ;;
@@ -572,7 +580,7 @@ key() {
             else
                 return
             fi
-            sleep 0.05
+            sleep 0.03
             clear_screen
             redraw
         ;;
@@ -581,7 +589,7 @@ key() {
         "${SHELLARO_SHUFFLE_ALL:=S}")
             2>/dev/null 1>&2 killall -15 mpg321
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
-            sleep 0.05
+            sleep 0.03
             clear_screen
             redraw
         ;;
@@ -625,6 +633,7 @@ key() {
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
             2>/dev/null 1>&2 killall -15 mpg321
+            sleep 0.03
             clear_screen
             redraw
         ;;
@@ -657,7 +666,7 @@ main() {
     cd "${2:-$1}" &>/dev/null ||:
 
     [[ $1 == -v ]] && {
-        printf '%s\n' "shellaro 0.1"
+        printf '%s\n' "shellaro 1.0"
         exit
     }
 
