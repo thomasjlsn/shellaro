@@ -87,7 +87,7 @@ get_ls_colors() {
 
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
-    PWD_status_line="${PWD##*/}"
+    PWD_status_line="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}"
 
     printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
@@ -404,46 +404,6 @@ key() {
                 clear
                 exit
             fi
-
-            # Play All in PWD
-            if [[ "$cmd_reply" == "all" ]]; then
-                2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
-                clear_screen
-                redraw
-            fi
-
-            # Play All in $MUSIC_DIRECTORY
-            if [[ "$cmd_reply" == "ALL" ]]; then
-                2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet &
-                clear_screen
-                redraw
-            fi
-
-            # Kill mpg321
-            if [[ "$cmd_reply" == "kill" ]]; then
-                2>/dev/null 1>&2 killall -15 mpg321
-                clear_screen
-                redraw
-            fi
-
-            # Shuffle All in PWD
-            if [[ "$cmd_reply" == "shuffle" ]]; then
-                2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
-                clear_screen
-                redraw
-            fi
-
-            # Shuffle All in $MUSIC_DIRECTORY
-            if [[ "$cmd_reply" == "SHUFFLE" ]]; then
-                2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
-                clear_screen
-                redraw
-            fi
-
         ;;
 
         # Open dir / Play song
@@ -453,6 +413,9 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 2>/dev/null 1>&2 killall -15 mpg321
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                sleep 0.05
+                clear_screen
+                redraw
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
             else
@@ -593,6 +556,7 @@ key() {
             else
                 return
             fi
+            sleep 0.05
             clear_screen
             redraw
         ;;
@@ -608,6 +572,7 @@ key() {
             else
                 return
             fi
+            sleep 0.05
             clear_screen
             redraw
         ;;
@@ -616,6 +581,7 @@ key() {
         "${SHELLARO_SHUFFLE_ALL:=S}")
             2>/dev/null 1>&2 killall -15 mpg321
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            sleep 0.05
             clear_screen
             redraw
         ;;
@@ -623,11 +589,13 @@ key() {
         # Volume Up
         "${SHELLARO_VOL_UP:=+}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
+            redraw
         ;;
 
         # Volume Down
         "${SHELLARO_VOL_DOWN:=-}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
+            redraw
         ;;
 
         # Set Volume
@@ -637,6 +605,7 @@ key() {
             if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
                 2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
             fi
+            redraw
         ;;
 
         # Mute / Unmute
