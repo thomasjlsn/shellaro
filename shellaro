@@ -88,15 +88,23 @@ status_line() {
 
     if [[ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]]; then
         if [[ -n "$(pgrep mpg321)" ]]; then
-            PWD_status_line="▷ MUTE ${PWD##*/}  "
+            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+                PWD_status_line="▷ MUTE ${PWD##*/}  "
+            else
+                PWD_status_line="◫ MUTE ${PWD##*/}  "
+            fi
         else
             PWD_status_line="□ MUTE ${PWD##*/}  "
         fi
     else
         if [[ -n "$(pgrep mpg321)" ]]; then
-            PWD_status_line="▶ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+            else
+                PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+            fi
         else
-            PWD_status_line="■ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+            PWD_status_line="□ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
         fi
     fi
 
@@ -426,7 +434,7 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 2>/dev/null 1>&2 killall -15 mpg321
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
-                sleep 0.03
+                sleep 0.2
                 clear_screen
                 redraw
             elif [[ -d ${list[scroll]} ]]; then
@@ -557,6 +565,8 @@ key() {
             else
                 kill -CONT "$(pgrep mpg321)"
             fi
+            clear_screen
+            redraw
         ;;
 
         # Go to $MUSIC_DIRECTORY
@@ -577,7 +587,7 @@ key() {
             else
                 return
             fi
-            sleep 0.03
+            sleep 0.2
             clear_screen
             redraw
         ;;
@@ -593,7 +603,7 @@ key() {
             else
                 return
             fi
-            sleep 0.03
+            sleep 0.2
             clear_screen
             redraw
         ;;
@@ -602,7 +612,7 @@ key() {
         "${SHELLARO_SHUFFLE_ALL:=S}")
             2>/dev/null 1>&2 killall -15 mpg321
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
-            sleep 0.03
+            sleep 0.2
             clear_screen
             redraw
         ;;
@@ -669,7 +679,7 @@ key() {
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
             2>/dev/null 1>&2 killall -15 mpg321
-            sleep 0.03
+            sleep 0.2
             clear_screen
             redraw
         ;;
