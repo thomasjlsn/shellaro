@@ -5,14 +5,14 @@
 # CONFIG
 MUSIC_DIRECTORY=~/Music
 SHELLARO_FAV1=~/Music/LedZeppelin
-SHELLARO_FAV2=~/Music/SlightlyStoopid
-SHELLARO_FAV3=~/Music/Sublime
-SHELLARO_FAV4=~/Music/TheDoors
-SHELLARO_FAV5=~/Music/TheRollingStones
-SHELLARO_FAV6=~/Music/TheWho
-SHELLARO_FAV7=~/Music/
-SHELLARO_FAV8=~/Music/
-SHELLARO_FAV9=~/Music/
+SHELLARO_FAV2=~/Music/MotleyCrue
+SHELLARO_FAV3=~/Music/SlightlyStoopid
+SHELLARO_FAV4=~/Music/Sublime
+SHELLARO_FAV5=~/Music/TheDoors
+SHELLARO_FAV6=~/Music/TheRollingStones
+SHELLARO_FAV7=~/Music/TheWho
+SHELLARO_FAV8=~/Music/VanHalen
+SHELLARO_FAV9=~/Music/OTHER
 
 setup_terminal() {
     printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
@@ -86,7 +86,6 @@ get_ls_colors() {
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
 
-    # if volume is muted, strike through the volume in status line
     if [[ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]]; then
         if [[ -n "$(pgrep mpg321)" ]]; then
             PWD_status_line="▷ MUTE ${PWD##*/}  "
@@ -95,9 +94,9 @@ status_line() {
         fi
     else
         if [[ -n "$(pgrep mpg321)" ]]; then
-            PWD_status_line="▶ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}  "
+            PWD_status_line="▶ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
         else
-            PWD_status_line="■ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}') ${PWD##*/}  "
+            PWD_status_line="■ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
         fi
     fi
 
@@ -287,6 +286,7 @@ mark() {
 
 play() {
     2>/dev/null 1>&2 mpg321 &
+    #TODO
 }
 
 open() {
@@ -299,7 +299,6 @@ open() {
 
     elif [[ -f $1 ]]; then
         # Figure out file type
-        # mime_type="$(file "-${file_flags:-biL}" "$1")"
         nohup "${SHELLARO_OPENER:-${opener:-xdg-open}}" "$1" &>/dev/null &
         disown
     fi
@@ -531,6 +530,7 @@ key() {
         "${SHELLARO_MARK_SONG:=" "}")
             mark "$scroll" "$1"
             # Scroll down one item when a file is selected
+            # TODO make enter key start playlist
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
@@ -549,13 +549,14 @@ key() {
             redraw
         ;;
 
-        # Play selection / Execute file operation
-        "${SHELLARO_DO:=p}")
-            [[ ${marked_files[*]} ]] && {
-                cd "$PWD" && "${file_program[@]}" "${marked_files[@]}" .
-                marked_files=()
-                redraw full
-            }
+        # Pause (suspend or resume mpg321)
+        "${SHELLARO_PAUSE_PLAY:=p}")
+            # If process is running; suspend; else resume
+            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+                kill -TSTP "$(pgrep mpg321)"
+            else
+                kill -CONT "$(pgrep mpg321)"
+            fi
         ;;
 
         # Go to $MUSIC_DIRECTORY
