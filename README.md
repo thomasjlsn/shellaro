@@ -30,9 +30,7 @@ a -- play all songs in directory
 s -- shuffle all songs in directory
 S -- shuffle all songs in $MUSIC_DIRECTORY
 
-space -- mark song for playlist (playlist not yet implemented)
-p -- play marked songs
-x -- clear marked songs
+p -- pause / play
 
 u -- vol + 5%
 d -- vol - 5%
