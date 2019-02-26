@@ -86,9 +86,9 @@ get_ls_colors() {
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
 
-    if [[ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]]; then
-        if [[ -n "$(pgrep mpg321)" ]]; then
-            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+    if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+        if [ -n "$(pgrep mpg321)" ]; then
+            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 PWD_status_line="▷ MUTE ${PWD##*/}  "
             else
                 PWD_status_line="◫ MUTE ${PWD##*/}  "
@@ -97,8 +97,8 @@ status_line() {
             PWD_status_line="□ MUTE ${PWD##*/}  "
         fi
     else
-        if [[ -n "$(pgrep mpg321)" ]]; then
-            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+        if [ -n "$(pgrep mpg321)" ]; then
+            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
             else
                 PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
@@ -560,7 +560,7 @@ key() {
         # Pause (suspend or resume mpg321)
         "${SHELLARO_PAUSE_PLAY:=p}")
             # If process is running; suspend; else resume
-            if [[ "$(ps -o s= -p $(pgrep mpg321))" == "S" ]]; then
+            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 kill -TSTP "$(pgrep mpg321)"
             else
                 kill -CONT "$(pgrep mpg321)"
@@ -583,7 +583,7 @@ key() {
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
             elif [[ -f ${list[scroll]} ]]; then
                 2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 *.mp3 --quiet &
+                2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet &
             else
                 return
             fi
@@ -599,7 +599,7 @@ key() {
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
             elif [[ -f ${list[scroll]} ]]; then
                 2>/dev/null 1>&2 killall -15 mpg321
-                2>/dev/null 1>&2 mpg321 *.mp3 --quiet --shuffle &
+                2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet --shuffle &
             else
                 return
             fi
@@ -633,7 +633,7 @@ key() {
         "${SHELLARO_SET_VOLUME1:=v}")
             cmd_line "Set Volume [0-100]: "
             # if cmd_reply is between 0 & 100
-            if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
+            if [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ]; then
                 2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
             fi
             redraw
@@ -655,7 +655,7 @@ key() {
         "${SHELLARO_SET_VOLUME2:==}")
             cmd_line "Set Volume [0-100]: "
             # if cmd_reply is between 0 & 100
-            if [ "$cmd_reply" -ge 0 -a "$cmd_reply" -le 100 ]; then
+            if [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ]; then
                 2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
             fi
             redraw
