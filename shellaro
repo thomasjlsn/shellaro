@@ -90,8 +90,10 @@ status_line() {
         if [ -n "$(pgrep mpg321)" ]; then
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 PWD_status_line="▷ MUTE ${PWD##*/}  "
-            else
+            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                 PWD_status_line="◫ MUTE ${PWD##*/}  "
+            else
+                PWD_status_line="▷ MUTE ${PWD##*/}  "
             fi
         else
             PWD_status_line="□ MUTE ${PWD##*/}  "
@@ -108,20 +110,29 @@ status_line() {
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
 
-        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-               "$((LINES-1))" \
-               "${SHELLARO_COL2:-2}" \
-               "${PWD_status_line:-/}" \
-               "${marked_files[*]:+${mark_ui}}"
+                printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+                       "$((LINES-1))" \
+                       "${SHELLARO_COL2:-2}" \
+                       "${PWD_status_line:-/}" \
+                       "${marked_files[*]:+${mark_ui}}"
 
-            else
+            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                 PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
 
-        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-               "$((LINES-1))" \
-               "${SHELLARO_COL2:-7}" \
-               "${PWD_status_line:-/}" \
-               "${marked_files[*]:+${mark_ui}}"
+                printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+                       "$((LINES-1))" \
+                       "${SHELLARO_COL2:-7}" \
+                       "${PWD_status_line:-/}" \
+                       "${marked_files[*]:+${mark_ui}}"
+
+            else
+                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+
+            printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+                   "$((LINES-1))" \
+                   "${SHELLARO_COL2:-2}" \
+                   "${PWD_status_line:-/}" \
+                   "${marked_files[*]:+${mark_ui}}"
 
             fi
         else
@@ -458,6 +469,7 @@ key() {
                 2>/dev/null 1>&2 killall -s SIGINT mpg321
                 2>/dev/null 1>&2 killall -s SIGINT mpg321
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                sleep 0.1
                 clear_screen
                 redraw
             elif [[ -d ${list[scroll]} ]]; then
@@ -601,6 +613,14 @@ key() {
             redraw
         ;;
 
+        # Next Song
+        "${SHELLARO_NEXT:=n}")
+            2>/dev/null 1>&2 killall -s SIGINT mpg321
+            sleep 0.1
+            clear_screen
+            redraw
+        ;;
+
         # Go to $MUSIC_DIRECTORY
         "${SHELLARO_GO_HOME1:=\`}"|\
         "${SHELLARO_GO_HOME2:=0}"|\
@@ -621,6 +641,7 @@ key() {
             else
                 return
             fi
+            sleep 0.1
             clear_screen
             redraw
         ;;
@@ -638,6 +659,7 @@ key() {
             else
                 return
             fi
+            sleep 0.1
             clear_screen
             redraw
         ;;
@@ -647,6 +669,7 @@ key() {
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            sleep 0.1
             clear_screen
             redraw
         ;;
@@ -714,6 +737,7 @@ key() {
         "${SHELLARO_KILL:=K}")
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             2>/dev/null 1>&2 killall -s SIGINT mpg321
+            sleep 0.1
             clear_screen
             redraw
         ;;
