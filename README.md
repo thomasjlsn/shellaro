@@ -31,6 +31,7 @@ s -- shuffle all songs in directory
 S -- shuffle all songs in $MUSIC_DIRECTORY
 
 p -- pause / play
+n -- next song
 
 u -- vol + 5%
 d -- vol - 5%
