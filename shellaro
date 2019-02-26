@@ -582,8 +582,17 @@ key() {
 
         # Pause (suspend or resume mpg321)
         "${SHELLARO_PAUSE_PLAY:=p}")
-            # If process is running; suspend; else resume
-            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
+            # If mpg321 is not running, play
+            if [ -z "$(pgrep mpg321)" ]; then
+                if [[ -d ${list[scroll]} ]]; then
+                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+                elif [[ -f ${list[scroll]} ]]; then
+                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
+                else
+                    return
+                fi
+            # Else if process is running; suspend; else resume
+            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 kill -TSTP "$(pgrep mpg321)"
             else
                 kill -CONT "$(pgrep mpg321)"
