@@ -43,7 +43,6 @@ m -- toggle mute / unmute
 [1-9] -- favorites
 
 K -- kill mpg321
-R -- redraw screen (eg. killall causes errors sometimes, leaving a message on the screen, 'R' will force redraw the screen to get rid of the message until I find a proper solution)
 
 q -- quit, :q also works
 ```

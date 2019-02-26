@@ -96,23 +96,46 @@ status_line() {
         else
             PWD_status_line="□ MUTE ${PWD##*/}  "
         fi
+
+        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+               "$((LINES-1))" \
+               "${SHELLARO_COL2:-1}" \
+               "${PWD_status_line:-/}" \
+               "${marked_files[*]:+${mark_ui}}"
+
     else
         if [ -n "$(pgrep mpg321)" ]; then
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+
+        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+               "$((LINES-1))" \
+               "${SHELLARO_COL2:-2}" \
+               "${PWD_status_line:-/}" \
+               "${marked_files[*]:+${mark_ui}}"
+
             else
                 PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+
+        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+               "$((LINES-1))" \
+               "${SHELLARO_COL2:-7}" \
+               "${PWD_status_line:-/}" \
+               "${marked_files[*]:+${mark_ui}}"
+
             fi
         else
             PWD_status_line="□ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+
+        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+               "$((LINES-1))" \
+               "${SHELLARO_COL2:-7}" \
+               "${PWD_status_line:-/}" \
+               "${marked_files[*]:+${mark_ui}}"
+
         fi
     fi
 
-    printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-           "$((LINES-1))" \
-           "${SHELLARO_COL2:-7}" \
-           "${PWD_status_line:-/}" \
-           "${marked_files[*]:+${mark_ui}}"
 }
 
 read_dir() {
