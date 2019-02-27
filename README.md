@@ -3,8 +3,9 @@
 A terminal music player written in bash, based on [fff](https://github.com/dylanaraps/fff)
 
 - quick navigation
-- play a song, play all, or shuffle with a single keypress
 - vim keybindings
+- play a song, play all, or shuffle all with a single keypress
+- pause / play
 - directory shortcuts
 - search with tab completion
 - volume controls
@@ -36,7 +37,7 @@ n -- next song
 
 u -- vol + 5%
 d -- vol - 5%
-v -- set volume (0 - 100)
+v -- set volume [0 - 100]
 m -- toggle mute / unmute
 
 / -- search
@@ -62,7 +63,7 @@ backspace -- go to parent dir
 
 + -- vol + 5%
 - -- vol - 5%
-= -- set volume (0 - 100)
+= -- set volume [0 - 100]
 ```
 
 ## Configuring Shellaro
