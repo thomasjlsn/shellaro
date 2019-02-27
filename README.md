@@ -11,6 +11,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 
 ## Dependencies
 
+- amixer
 - bash
 - [mpg321](http://mpg321.sourceforge.net/)
 - pgrep
