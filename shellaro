@@ -454,6 +454,12 @@ kill_music () {
     fi
 }
 
+reload () {
+    sleep 0.1
+    clear_screen
+    redraw
+}
+
 key() {
     case "$1" in
 
@@ -478,9 +484,7 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
-                sleep 0.1
-                clear_screen
-                redraw
+                reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
             fi
@@ -617,16 +621,13 @@ key() {
             else
                 kill -CONT "$(pgrep mpg321)"
             fi
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Next Song
         "${SHELLARO_NEXT:=n}")
             2>/dev/null 1>&2 killall -s SIGINT mpg321
-            sleep 0.1
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Go to $MUSIC_DIRECTORY
@@ -648,9 +649,7 @@ key() {
             else
                 return
             fi
-            sleep 0.1
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Shuffle All In PWD
@@ -665,9 +664,7 @@ key() {
             else
                 return
             fi
-            sleep 0.1
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Shuffle All In $MUSIC_DIRECTORY
@@ -675,9 +672,7 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
-            sleep 0.1
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Volume Up
@@ -723,9 +718,7 @@ key() {
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
             kill_music
-            sleep 0.1
-            clear_screen
-            redraw
+            reload
         ;;
 
         # Redraw, useful when bugs appear!
