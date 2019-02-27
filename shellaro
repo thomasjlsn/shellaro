@@ -89,14 +89,14 @@ status_line() {
     if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
         if [ -n "$(pgrep mpg321)" ]; then
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                PWD_status_line="▷ MUTE ${PWD##*/}  "
+                PWD_status_line="▷ MUTE ${NOW_PLAYING}  "
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                PWD_status_line="◫ MUTE ${PWD##*/}  "
+                PWD_status_line="◫ MUTE ${NOW_PLAYING}  "
             else
-                PWD_status_line="▷ MUTE ${PWD##*/}  "
+                PWD_status_line="▷ MUTE ${NOW_PLAYING}  "
             fi
         else
-            PWD_status_line="□ MUTE ${PWD##*/}  "
+            PWD_status_line="□ MUTE ${NOW_PLAYING}  "
         fi
 
         printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
@@ -108,7 +108,7 @@ status_line() {
     else
         if [ -n "$(pgrep mpg321)" ]; then
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
 
                 printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
                        "$((LINES-1))" \
@@ -117,7 +117,7 @@ status_line() {
                        "${marked_files[*]:+${mark_ui}}"
 
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+                PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
 
                 printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
                        "$((LINES-1))" \
@@ -126,7 +126,7 @@ status_line() {
                        "${marked_files[*]:+${mark_ui}}"
 
             else
-                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
 
             printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
                    "$((LINES-1))" \
@@ -136,7 +136,7 @@ status_line() {
 
             fi
         else
-            PWD_status_line="□ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${PWD##*/}  "
+            PWD_status_line="□ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
 
         printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
                "$((LINES-1))" \
@@ -484,6 +484,9 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                export NOW_PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}'\
+                | awk -F ".mp3" '{print $1}')"
                 reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
@@ -610,8 +613,13 @@ key() {
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+                    export NOW_PLAYING="$(echo "${list[scroll]}"\
+                    | awk -F "/" '{print $NF}')"
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
+                    export NOW_PLAYING="$(echo "${list[scroll]}"\
+                    | awk -F "/" '{print $NF}'\
+                    | awk -F ".mp3" '{print $1}')"
                 else
                     return
                 fi
@@ -643,9 +651,12 @@ key() {
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+                export NOW_PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}')"
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet &
+                export NOW_PLAYING="${PWD##*/}"
             else
                 return
             fi
@@ -658,9 +669,12 @@ key() {
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
+                export NOW_PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}')"
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet --shuffle &
+                export NOW_PLAYING="${PWD##*/}"
             else
                 return
             fi
@@ -672,6 +686,7 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            export NOW_PLAYING="ALL"
             reload
         ;;
 
@@ -718,6 +733,7 @@ key() {
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
             kill_music
+            export NOW_PLAYING=""
             reload
         ;;
 
