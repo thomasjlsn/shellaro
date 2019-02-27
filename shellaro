@@ -474,6 +474,7 @@ key() {
         "${SHELLARO_CHILD3:=$'\eOC'}"|\
         "${SHELLARO_CHILD4:=$'\e[C'}"|\
         "${SHELLARO_CHILD5:=""}")
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
@@ -482,8 +483,6 @@ key() {
                 redraw
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
-            else
-                :
             fi
             redraw
         ;;
@@ -604,6 +603,7 @@ key() {
         "${SHELLARO_PAUSE_PLAY:=p}")
             # If mpg321 is not running, play
             if [ -z "$(pgrep mpg321)" ]; then
+                ((search == 1 && search_end_early != 1)) && open "$PWD"
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
                 elif [[ -f ${list[scroll]} ]]; then
@@ -638,6 +638,7 @@ key() {
 
         # Play All In PWD
         "${SHELLARO_PLAY:=a}")
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
@@ -654,6 +655,7 @@ key() {
 
         # Shuffle All In PWD
         "${SHELLARO_SHUFFLE:=s}")
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
@@ -670,6 +672,7 @@ key() {
 
         # Shuffle All In $MUSIC_DIRECTORY
         "${SHELLARO_SHUFFLE_ALL:=S}")
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
             sleep 0.1
