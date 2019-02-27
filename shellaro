@@ -448,7 +448,13 @@ cmd_line() {
 }
 
 kill_music () {
-    if [ -n "$(pgrep mpg321)" ]; then
+    if [ -z "$(pgrep mpg321)" ]; then
+        return
+    elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+        kill -CONT "$(pgrep mpg321)"
+        2>/dev/null 1>&2 killall -s SIGINT mpg321
+        2>/dev/null 1>&2 killall -s SIGINT mpg321
+    elif [ -n "$(pgrep mpg321)" ]; then
         2>/dev/null 1>&2 killall -s SIGINT mpg321
         2>/dev/null 1>&2 killall -s SIGINT mpg321
     else
