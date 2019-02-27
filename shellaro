@@ -86,6 +86,8 @@ get_ls_colors() {
 status_line() {
     local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
 
+    NOW_PLAYING="$(cat ${HOME}/.cache/shellaro/now_playing)"
+
     if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
         if [ -n "$(pgrep mpg321)" ]; then
             if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
@@ -484,9 +486,9 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
-                export NOW_PLAYING="$(echo "${list[scroll]}"\
-                | awk -F "/" '{print $NF}'\
-                | awk -F ".mp3" '{print $1}')"
+                PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}')"
+                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
                 reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
@@ -613,13 +615,14 @@ key() {
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
-                    export NOW_PLAYING="$(echo "${list[scroll]}"\
+                    PLAYING="$(echo "${list[scroll]}"\
                     | awk -F "/" '{print $NF}')"
+                    echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
-                    export NOW_PLAYING="$(echo "${list[scroll]}"\
-                    | awk -F "/" '{print $NF}'\
-                    | awk -F ".mp3" '{print $1}')"
+                    PLAYING="$(echo "${list[scroll]}"\
+                    | awk -F "/" '{print $NF}')"
+                    echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
                 else
                     return
                 fi
@@ -635,6 +638,10 @@ key() {
         # Next Song
         "${SHELLARO_NEXT:=n}")
             2>/dev/null 1>&2 killall -s SIGINT mpg321
+            sleep 0.2
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
             reload
         ;;
 
@@ -651,12 +658,13 @@ key() {
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
-                export NOW_PLAYING="$(echo "${list[scroll]}"\
+                PLAYING="$(echo "${list[scroll]}"\
                 | awk -F "/" '{print $NF}')"
+                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet &
-                export NOW_PLAYING="${PWD##*/}"
+                echo "${PWD##*/}" > "${HOME}/.cache/shellaro/now_playing"
             else
                 return
             fi
@@ -669,12 +677,13 @@ key() {
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
-                export NOW_PLAYING="$(echo "${list[scroll]}"\
+                PLAYING="$(echo "${list[scroll]}"\
                 | awk -F "/" '{print $NF}')"
+                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet --shuffle &
-                export NOW_PLAYING="${PWD##*/}"
+                echo "${PWD##*/}" > "${HOME}/.cache/shellaro/now_playing"
             else
                 return
             fi
@@ -686,7 +695,7 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
-            export NOW_PLAYING="ALL"
+            echo "ALL" > "${HOME}/.cache/shellaro/now_playing"
             reload
         ;;
 
@@ -733,7 +742,7 @@ key() {
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
             kill_music
-            export NOW_PLAYING=""
+            echo "" > "${HOME}/.cache/shellaro/now_playing"
             reload
         ;;
 
@@ -789,6 +798,9 @@ main() {
 
     # Trap the window resize signal (handle window resize events)
     trap 'get_term_size; redraw' WINCH
+
+    mkdir -p "${HOME}/.cache/shellaro"
+    touch "${HOME}/.cache/shellaro/now_playing"
 
     get_term_size
     setup_terminal
