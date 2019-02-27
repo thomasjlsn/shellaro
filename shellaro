@@ -445,6 +445,15 @@ cmd_line() {
     printf '\e[2K\e[?25l\e8'
 }
 
+kill_music () {
+    if [ -n "$(pgrep mpg321)" ]; then
+        2>/dev/null 1>&2 killall -s SIGINT mpg321
+        2>/dev/null 1>&2 killall -s SIGINT mpg321
+    else
+        return
+    fi
+}
+
 key() {
     case "$1" in
 
@@ -466,8 +475,7 @@ key() {
         "${SHELLARO_CHILD4:=$'\e[C'}"|\
         "${SHELLARO_CHILD5:=""}")
             if [[ ${list[scroll]} == *.mp3 ]]; then
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
+                kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
                 sleep 0.1
                 clear_screen
@@ -631,12 +639,10 @@ key() {
         # Play All In PWD
         "${SHELLARO_PLAY:=a}")
             if [[ -d ${list[scroll]} ]]; then
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
+                kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
             elif [[ -f ${list[scroll]} ]]; then
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
+                kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet &
             else
                 return
@@ -649,12 +655,10 @@ key() {
         # Shuffle All In PWD
         "${SHELLARO_SHUFFLE:=s}")
             if [[ -d ${list[scroll]} ]]; then
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
+                kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
             elif [[ -f ${list[scroll]} ]]; then
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
-                2>/dev/null 1>&2 killall -s SIGINT mpg321
+                kill_music
                 2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet --shuffle &
             else
                 return
@@ -666,8 +670,7 @@ key() {
 
         # Shuffle All In $MUSIC_DIRECTORY
         "${SHELLARO_SHUFFLE_ALL:=S}")
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
+            kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
             sleep 0.1
             clear_screen
@@ -735,8 +738,7 @@ key() {
 
         # Kill mpg321
         "${SHELLARO_KILL:=K}")
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
+            kill_music
             sleep 0.1
             clear_screen
             redraw
