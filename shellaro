@@ -486,10 +486,15 @@ key() {
         ;;
 
         # Open dir / Play song
+        # "${SHELLARO_CHILD5:=""}")
         "${SHELLARO_CHILD1:=l}"|\
         "${SHELLARO_CHILD2:=C}"|\
         "${SHELLARO_CHILD3:=$'\eOC'}"|\
         "${SHELLARO_CHILD4:=$'\e[C'}")
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
+
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
@@ -504,38 +509,6 @@ key() {
             redraw
         ;;
 
-        # ENTER, plays a song or a playlist if there are marked files
-        "${SHELLARO_CHILD5:=""}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-
-            # If there are marked files
-            if [ -n "${marked_files}" ]; then
-                playlist_file="${HOME}/.cache/shellaro/playlist"
-                # Save marked files to a file and open them for editing
-                printf '%s\n' "${marked_files[@]}" > "$playlist_file"
-
-                kill_music
-                2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
-
-                echo "PLAYLIST (${#marked_files[@]})" > "${HOME}/.cache/shellaro/now_playing"
-                marked_files=()
-                reload
-
-            elif [[ ${list[scroll]} == *.mp3 ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
-
-                PLAYING="$(echo "${list[scroll]}"\
-                | awk -F "/" '{print $NF}')"
-                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
-                reload
-
-            elif [[ -d ${list[scroll]} ]]; then
-                open "${list[scroll]}"
-            fi
-            redraw
-        ;;
-
         # Go to the parent directory
         "${SHELLARO_PARENT1:=h}"|\
         "${SHELLARO_PARENT2:=D}"|\
@@ -543,6 +516,10 @@ key() {
         "${SHELLARO_PARENT4:=$'\eOD'}"|\
         "${SHELLARO_PARENT5:=$'\e[D'}"|\
         "${SHELLARO_PARENT6:=$'\b'}")
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
+
             # If a search was done, clear the results and open the current dir
             if ((search == 1 && search_end_early != 1)); then
                 open "$PWD"
@@ -560,6 +537,10 @@ key() {
         "${SHELLARO_SCROLL_DOWN2:=$'\eOB'}"|\
         "${SHELLARO_SCROLL_DOWN3:=$'\e[B'}"|\
         "${SHELLARO_SCROLL_DOWN4:=B}")
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
+
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
@@ -576,6 +557,10 @@ key() {
         "${SHELLARO_SCROLL_UP1:=$'\eOA'}"|\
         "${SHELLARO_SCROLL_UP1:=$'\e[A'}"|\
         "${SHELLARO_SCROLL_UP2:=A}")
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
+
             ((scroll > 0)) && {
                 ((scroll--))
 
@@ -639,6 +624,40 @@ key() {
                 format_status_line "$scroll"
                 status_line
             }
+
+        ;;
+
+
+        "${SHELLARO_PLAY_PLAYLIST:=""}")
+            if [ -z "$(pgrep mpg321)" ]; then
+                echo "" > "${HOME}/.cache/shellaro/now_playing"
+            fi
+
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
+
+            if ((${#marked_files[@]} != 0)); then
+                playlist_file="${HOME}/.cache/shellaro/playlist"
+                # Save marked files to a file and open them for editing
+                printf '%s\n' "${marked_files[@]}" > "$playlist_file"
+
+                kill_music
+                2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
+
+                echo "PLAYLIST (${#marked_files[@]})" > "${HOME}/.cache/shellaro/now_playing"
+                marked_files=()
+                reload
+
+            elif [[ ${list[scroll]} == *.mp3 ]]; then
+                kill_music
+                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}')"
+                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
+                reload
+            elif [[ -d ${list[scroll]} ]]; then
+                open "${list[scroll]}"
+            fi
+            redraw
 
         ;;
 
