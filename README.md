@@ -6,6 +6,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - vim keybindings
 - play a song, play all, or shuffle all with a single keypress
 - pause / play
+- custom playlists
 - directory shortcuts
 - search with tab completion
 - volume controls
@@ -19,51 +20,71 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 
 ## Usage
 
+### Navigation
+
 ```
 k -- go up
 j -- go down
+l -- go to child dir
 h -- go to parent dir
-l -- go to child dir / play song
 
 g -- go to top
 G -- go to bottom
 
-a -- play all songs in directory
-s -- shuffle all songs in directory
-S -- shuffle all songs in $MUSIC_DIRECTORY
+enter -- go to child dir
+backspace -- go to parent dir
 
-p -- pause / play
-n -- next song
-
-u -- vol + 5%
-d -- vol - 5%
-v -- set volume [0 - 100]
-m -- toggle mute / unmute
-
-/ -- search
+` -- go home ($MUSIC_DIRECTORY)
 ~ -- go home ($MUSIC_DIRECTORY)
 
 [1-9] -- favorites
 
-K -- kill mpg321
+/ -- search
+
+(arrow keys also work for navigation)
+```
+
+### Play
+
+```
+enter -- play song
+
+l -- play song
+right arrow -- play song
+
+p -- pause / play
+n -- next song
+K -- stop (kill mpg321)
 
 q -- quit, :q also works
+
+a -- play all songs in directory
+s -- shuffle all songs in directory
+S -- shuffle all songs in $MUSIC_DIRECTORY
 ```
 
-## Non Vim-like alternatives
+### Playlists
 
 ```
-up -- go up
-down -- go down
-left -- go to parent dir
-right -- go to child dir / play song
+space -- mark file for playlist
+enter -- play playlist
 
-enter -- go to child dir / play song
-backspace -- go to parent dir
+x -- clear marked selection
+```
+
+### Volume
+
+```
+u -- vol + 5%
+d -- vol - 5%
 
 + -- vol + 5%
 - -- vol - 5%
+
+v -- set volume [0 - 100]
 = -- set volume [0 - 100]
+
+m -- toggle mute / unmute
 ```
 
 ## Configuring Shellaro
