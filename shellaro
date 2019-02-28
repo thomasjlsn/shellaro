@@ -622,6 +622,7 @@ key() {
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
                 reload
+
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
             fi
@@ -779,6 +780,7 @@ key() {
         # Quit
         q|Q)
             clear
+            echo "" > "${HOME}/.cache/shellaro/playlist"
             exit
         ;;
     esac
