@@ -508,7 +508,8 @@ key() {
         "${SHELLARO_CHILD5:=""}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
 
-            if ! [[ "${marked_files[@]}" == 0 ]]; then
+            # If there are marked files
+            if [ -n "${marked_files}" ]; then
                 playlist_file="${HOME}/.cache/shellaro/playlist"
                 # Save marked files to a file and open them for editing
                 printf '%s\n' "${marked_files[@]}" > "$playlist_file"
