@@ -595,7 +595,7 @@ key() {
         ;;
 
         # Mark songs to play
-        "${SHELLARO_MARK_SONG:=" "}")
+        "${SHELLARO_MARK_PLAYLIST:=" "}")
             mark "$scroll" "$1"
             # Scroll down one item when a file is selected
             # TODO make enter key start playlist
@@ -608,6 +608,21 @@ key() {
                 format_status_line "$scroll"
                 status_line
             }
+
+        ;;
+
+        "${SHELLARO_PLAY_PLAYLIST:=P}")
+            playlist_file="${HOME}/.cache/shellaro/playlist"
+
+            # Save marked files to a file and open them for editing
+            printf '%s\n' "${marked_files[@]}" > "$playlist_file"
+
+            kill_music
+            2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
+
+            echo "PLAYLIST" > "${HOME}/.cache/shellaro/now_playing"
+
+            reload
 
         ;;
 
@@ -823,6 +838,7 @@ main() {
 
     mkdir -p "${HOME}/.cache/shellaro"
     touch "${HOME}/.cache/shellaro/now_playing"
+    touch "${HOME}/.cache/shellaro/playlist"
 
     if [ -z "$(pgrep mpg321)" ]; then
         echo "" > "${HOME}/.cache/shellaro/now_playing"
