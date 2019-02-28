@@ -779,7 +779,6 @@ key() {
         # and exit the current instance (for testing)
         "${SHELLARO_RESTART:=&}")
             clear_screen
-            echo "RESTARTING"
             sleep .2
             ~/GitHub/shellaro/shellaro "$0" && exit
         ;;
@@ -825,6 +824,14 @@ main() {
     mkdir -p "${HOME}/.cache/shellaro"
     touch "${HOME}/.cache/shellaro/now_playing"
 
+    if [ -z "$(pgrep mpg321)" ]; then
+        echo "" > "${HOME}/.cache/shellaro/now_playing"
+    fi
+
+    open "$MUSIC_DIRECTORY"
+
+    setup_options
+
     get_term_size
     setup_terminal
     redraw full
@@ -838,6 +845,4 @@ main() {
     }
 }
 
-open "$MUSIC_DIRECTORY"
-setup_options
 main "$@"
