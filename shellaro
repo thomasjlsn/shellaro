@@ -489,8 +489,7 @@ key() {
         "${SHELLARO_CHILD1:=l}"|\
         "${SHELLARO_CHILD2:=C}"|\
         "${SHELLARO_CHILD3:=$'\eOC'}"|\
-        "${SHELLARO_CHILD4:=$'\e[C'}"|\
-        "${SHELLARO_CHILD5:=""}")
+        "${SHELLARO_CHILD4:=$'\e[C'}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
@@ -499,6 +498,37 @@ key() {
                 | awk -F "/" '{print $NF}')"
                 echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
                 reload
+            elif [[ -d ${list[scroll]} ]]; then
+                open "${list[scroll]}"
+            fi
+            redraw
+        ;;
+
+        # ENTER, plays a song or a playlist if there are marked files
+        "${SHELLARO_CHILD5:=""}")
+            ((search == 1 && search_end_early != 1)) && open "$PWD"
+
+            if ! [[ "${marked_files[@]}" == 0 ]]; then
+                playlist_file="${HOME}/.cache/shellaro/playlist"
+                # Save marked files to a file and open them for editing
+                printf '%s\n' "${marked_files[@]}" > "$playlist_file"
+
+                kill_music
+                2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
+
+                echo "PLAYLIST (${#marked_files[@]})" > "${HOME}/.cache/shellaro/now_playing"
+                marked_files=()
+                reload
+
+            elif [[ ${list[scroll]} == *.mp3 ]]; then
+                kill_music
+                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+
+                PLAYING="$(echo "${list[scroll]}"\
+                | awk -F "/" '{print $NF}')"
+                echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
+                reload
+
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
             fi
@@ -608,21 +638,6 @@ key() {
                 format_status_line "$scroll"
                 status_line
             }
-
-        ;;
-
-        "${SHELLARO_PLAY_PLAYLIST:=P}")
-            playlist_file="${HOME}/.cache/shellaro/playlist"
-
-            # Save marked files to a file and open them for editing
-            printf '%s\n' "${marked_files[@]}" > "$playlist_file"
-
-            kill_music
-            2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
-
-            echo "PLAYLIST" > "${HOME}/.cache/shellaro/now_playing"
-
-            reload
 
         ;;
 
