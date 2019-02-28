@@ -51,7 +51,8 @@ get_term_size() {
     read -r LINES COLUMNS < <(stty size)
 
     # Max list items that fit in the scroll area
-    ((max_items=LINES-3))
+    # Leave 2 lines at the bottom for status & cmd line
+    ((max_items=LINES-2))
 }
 
 get_ls_colors() {
@@ -448,17 +449,19 @@ cmd_line() {
 }
 
 kill_music () {
+    # Do nothing if mpg321 is not running
     if [ -z "$(pgrep mpg321)" ]; then
         return
+
+    # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
     elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
         kill -CONT "$(pgrep mpg321)"
         2>/dev/null 1>&2 killall -s SIGINT mpg321
         2>/dev/null 1>&2 killall -s SIGINT mpg321
+
     elif [ -n "$(pgrep mpg321)" ]; then
         2>/dev/null 1>&2 killall -s SIGINT mpg321
         2>/dev/null 1>&2 killall -s SIGINT mpg321
-    else
-        return
     fi
 }
 
@@ -619,35 +622,49 @@ key() {
             # If mpg321 is not running, play
             if [ -z "$(pgrep mpg321)" ]; then
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
+
+                # If list item is a dir, play all in dir
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+
+                    # Set NOW_PLAYING as dir name
                     PLAYING="$(echo "${list[scroll]}"\
                     | awk -F "/" '{print $NF}')"
                     echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
+
+                # If list item is a file, play it
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
+
+                    # Set NOW_PLAYING as file name
                     PLAYING="$(echo "${list[scroll]}"\
                     | awk -F "/" '{print $NF}')"
                     echo "${PLAYING}" > "${HOME}/.cache/shellaro/now_playing"
-                else
-                    return
                 fi
-            # Else if process is running; suspend; else resume
+
+            # Elif process is running; suspend
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                kill -TSTP "$(pgrep mpg321)"
-            else
+                kill -STOP "$(pgrep mpg321)"
+
+            # Elif suspended; resume
+            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                 kill -CONT "$(pgrep mpg321)"
             fi
+
             reload
         ;;
 
         # Next Song
         "${SHELLARO_NEXT:=n}")
+            # A single SIGINT (ctrl-c) in mpg321 goes to the next song
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             sleep 0.2
+
+            # if there is no next song, reset NOW_PLAYING
             if [ -z "$(pgrep mpg321)" ]; then
                 echo "" > "${HOME}/.cache/shellaro/now_playing"
             fi
+
             reload
         ;;
 
