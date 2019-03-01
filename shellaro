@@ -31,9 +31,9 @@ COLOR_CURSOR=37
 COLOR_DIR=34 # Blue
 COLOR_DIR_BOLD=1 # Bold
 
-# Files
-COLOR_FILE=37 # White
-COLOR_FILE_BOLD=0 # Not bold
+# Color of currently playing song
+COLOR_CURRENT_SONG=32 # Green
+COLOR_CURRENT_SONG_BOLD=1
 
 # Other
 COLOR_OTHER=37
@@ -110,7 +110,7 @@ set_initial_status() {
 status_line() {
     local mark_ui="   [${#marked_files[@]}]"
 
-    local NOW_PLAYING=$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')
+    NOW_PLAYING=$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')
 
     if [[ $IS_PAUSED == true ]]; then
         local ICON="${ICON_PAUSED}"
@@ -186,8 +186,9 @@ format_line() {
         format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
         suffix+='/'
 
-    elif [[ -f ${list[$1]} ]]; then
-        format+="\\e[${fi:-${COLOR_FILE_BOLD};${COLOR_FILE}}m"
+    elif [[ ${list[$1]} == *${NOW_PLAYING} ]] && [[ ${NOW_PLAYING} == *".mp3" ]]; then
+        format+="\\e[${fi:-${COLOR_CURRENT_SONG_BOLD};${COLOR_CURRENT_SONG}m}"
+        suffix+='♫ '
 
     else
         format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
@@ -431,7 +432,11 @@ kill_music () {
 }
 
 reload () {
+    # Reload screen twice, first time updates status_line,
+    # second time updates COLOR_CURRENT_SONG
     sleep 0.1
+    clear_screen
+    redraw
     clear_screen
     redraw
 }
