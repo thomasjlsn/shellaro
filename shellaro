@@ -459,7 +459,7 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                 IS_PAUSED=false
                 reload
             elif [[ -d ${list[scroll]} ]]; then
@@ -583,14 +583,14 @@ key() {
                 printf '%s\n' "${marked_files[@]}" > "$playlist_file"
 
                 kill_music
-                2>/dev/null 1>&2 mpg321 --list "$playlist_file" --quiet &
+                2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
 
                 marked_files=()
                 reload
 
             elif [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                 reload
 
             elif [[ -d ${list[scroll]} ]]; then
@@ -615,12 +615,12 @@ key() {
 
                 # If list item is a dir, play all in dir
                 if [[ -d ${list[scroll]} ]]; then
-                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle --quiet &
+                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
                     IS_PAUSED=false
 
                 # If list item is a file, play it
                 elif [[ -f ${list[scroll]} ]]; then
-                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
+                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                     IS_PAUSED=false
                 fi
 
@@ -663,10 +663,10 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet &
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet &
+                2>/dev/null 1>&2 mpg321 ./*.mp3 &
             else
                 return
             fi
@@ -679,10 +679,10 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --quiet --shuffle &
+                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
             elif [[ -f ${list[scroll]} ]]; then
                 kill_music
-                2>/dev/null 1>&2 mpg321 ./*.mp3 --quiet --shuffle &
+                2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &
             else
                 return
             fi
@@ -694,7 +694,7 @@ key() {
         "${KEY_SHUFFLE_ALL:=S}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
-            2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &
             IS_PAUSED=false
             reload
         ;;
