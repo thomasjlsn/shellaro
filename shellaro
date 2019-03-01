@@ -85,72 +85,40 @@ get_ls_colors() {
 }
 
 status_line() {
-    local mark_ui=" ${#marked_files[@]} marked (${file_program[*]})"
+    local mark_ui=" ${#marked_files[@]}"
 
-    # NOW_PLAYING="$(cat ${HOME}/.cache/shellaro/now_playing)"
-    NOW_PLAYING="$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')"
+    local NOW_PLAYING=$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')
 
-    if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
-        if [ -n "$(pgrep mpg321)" ]; then
-            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                PWD_status_line="▷ MUTE ${NOW_PLAYING}  "
-            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                PWD_status_line="◫ MUTE ${NOW_PLAYING}  "
-            else
-                PWD_status_line="▷ MUTE ${NOW_PLAYING}  "
-            fi
-        else
-            PWD_status_line="□ MUTE ${NOW_PLAYING}  "
-        fi
-
-        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-               "$((LINES-1))" \
-               "${SHELLARO_COL2:-1}" \
-               "${PWD_status_line:-/}" \
-               "${marked_files[*]:+${mark_ui}}"
-
+    if [[ $IS_PAUSED == true ]]; then
+        local ICON="◫"
+        local COLOR="47"
     else
-        if [ -n "$(pgrep mpg321)" ]; then
-            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
-
-                printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-                       "$((LINES-1))" \
-                       "${SHELLARO_COL2:-2}" \
-                       "${PWD_status_line:-/}" \
-                       "${marked_files[*]:+${mark_ui}}"
-
-            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                PWD_status_line="◫ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
-
-                printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-                       "$((LINES-1))" \
-                       "${SHELLARO_COL2:-7}" \
-                       "${PWD_status_line:-/}" \
-                       "${marked_files[*]:+${mark_ui}}"
-
-            else
-                PWD_status_line="▷ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
-
-            printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-                   "$((LINES-1))" \
-                   "${SHELLARO_COL2:-2}" \
-                   "${PWD_status_line:-/}" \
-                   "${marked_files[*]:+${mark_ui}}"
-
-            fi
-        else
-            PWD_status_line="□ $(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2}')  ${NOW_PLAYING}  "
-
-        printf '\e7\e[?6l\e[%sH\e[30;4%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
-               "$((LINES-1))" \
-               "${SHELLARO_COL2:-7}" \
-               "${PWD_status_line:-/}" \
-               "${marked_files[*]:+${mark_ui}}"
-
-        fi
+        local ICON="▷"
+        local COLOR="42"
     fi
 
+    if [[ $IS_MUTED == true ]]; then
+        local VOL="MUTE"
+        local COLOR="37"
+    else
+        local VOL=$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')
+    fi
+
+    if [ -n "$(pgrep mpg321)" ]; then
+        local ICON="${ICON}"
+        local COLOR="${COLOR}"
+    else
+        local ICON="□"
+        local COLOR="47"
+    fi
+
+    PWD_status_line="${ICON} ${VOL}  ${NOW_PLAYING}"
+
+    printf '\e7\e[?6l\e[%sH\e[30;%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+           "$((LINES-1))" \
+           "${COLOR}" \
+           "${PWD_status_line:-/}" \
+           "${marked_files[*]:+${mark_ui}}"
 }
 
 read_dir() {
@@ -654,10 +622,12 @@ key() {
             # Elif process is running; suspend
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
                 kill -STOP "$(pgrep mpg321)"
+                IS_PAUSED=true
 
             # Elif suspended; resume
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                 kill -CONT "$(pgrep mpg321)"
+                IS_PAUSED=false
             fi
 
             reload
@@ -745,6 +715,11 @@ key() {
         # Mute / Unmute
         "${SHELLARO_TOGGLE_MUTE:=m}")
             2>/dev/null 1>&2 amixer -D pulse sset Master toggle
+            if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+                IS_MUTED=true
+            else
+                IS_MUTED=false
+            fi
             redraw
         ;;
 
