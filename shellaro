@@ -92,16 +92,18 @@ get_term_size() {
 }
 
 set_initial_status() {
-    if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-        IS_PAUSED=false
-    elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-        IS_PAUSED=true
-    fi
+    if [ -n "$(pgrep mpg321)" ]; then
+        if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
+            IS_PAUSED=false
+        elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+            IS_PAUSED=true
+        fi
 
-    if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
-        IS_MUTED=true
-    else
-        IS_MUTED=false
+        if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+            IS_MUTED=true
+        else
+            IS_MUTED=false
+        fi
     fi
 }
 
