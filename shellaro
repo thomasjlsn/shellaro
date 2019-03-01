@@ -640,10 +640,13 @@ key() {
 
         # Next Song
         "${KEY_NEXT:=n}")
+            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+                kill -CONT "$(pgrep mpg321)"
+                IS_PAUSED=false
+            fi
+
             # A single SIGINT (ctrl-c) in mpg321 goes to the next song
             2>/dev/null 1>&2 killall -s SIGINT mpg321
-            sleep 0.2
-            IS_PAUSED=false
 
             reload
         ;;
