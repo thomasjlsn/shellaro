@@ -460,6 +460,7 @@ key() {
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
                 2>/dev/null 1>&2 mpg321 -q "${list[scroll]}" &
+                IS_PAUSED=false
                 reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
@@ -595,6 +596,7 @@ key() {
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
             fi
+            IS_PAUSED=false
             redraw
 
         ;;
@@ -614,10 +616,12 @@ key() {
                 # If list item is a dir, play all in dir
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle --quiet &
+                    IS_PAUSED=false
 
                 # If list item is a file, play it
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" --quiet &
+                    IS_PAUSED=false
                 fi
 
             # Elif process is running; suspend
@@ -639,6 +643,7 @@ key() {
             # A single SIGINT (ctrl-c) in mpg321 goes to the next song
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             sleep 0.2
+            IS_PAUSED=false
 
             reload
         ;;
@@ -662,6 +667,7 @@ key() {
             else
                 return
             fi
+            IS_PAUSED=false
             reload
         ;;
 
@@ -677,6 +683,7 @@ key() {
             else
                 return
             fi
+            IS_PAUSED=false
             reload
         ;;
 
@@ -685,6 +692,7 @@ key() {
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
+            IS_PAUSED=false
             reload
         ;;
 
