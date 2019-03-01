@@ -105,6 +105,7 @@ set_initial_status() {
             IS_MUTED=false
         fi
     fi
+    STARTED=$(echo "$(date +%s)")
 }
 
 status_line() {
@@ -432,12 +433,11 @@ kill_music () {
 }
 
 reload () {
-    # Reload screen twice, first time updates status_line,
+    # Redraw screen twice, first time updates status_line,
     # second time updates COLOR_CURRENT_SONG
-    sleep 0.1
+    sleep 0.2
     clear_screen
     redraw
-    clear_screen
     redraw
 }
 
@@ -466,6 +466,7 @@ key() {
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                 IS_PAUSED=false
+                STARTED=$(echo "$(date +%s)")
                 reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
@@ -602,6 +603,7 @@ key() {
                 open "${list[scroll]}"
             fi
             IS_PAUSED=false
+            STARTED=$(echo "$(date +%s)")
             redraw
 
         ;;
@@ -622,11 +624,13 @@ key() {
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
                     IS_PAUSED=false
+                    STARTED=$(echo "$(date +%s)")
 
                 # If list item is a file, play it
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                     IS_PAUSED=false
+                    STARTED=$(echo "$(date +%s)")
                 fi
 
             # Elif process is running; suspend
@@ -638,6 +642,7 @@ key() {
             elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                 kill -CONT "$(pgrep mpg321)"
                 IS_PAUSED=false
+                STARTED=$(echo "$(date +%s)")
             fi
 
             reload
@@ -645,15 +650,29 @@ key() {
 
         # Next Song
         "${KEY_NEXT:=n}")
-            if [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                kill -CONT "$(pgrep mpg321)"
-                IS_PAUSED=false
+            local MIN_AGE=2 # seconds
+            local KEYPRESS=$(date +%s)
+            # Don't allow the user to skip to the next song within the first 2 seconds,
+            # otherwise mpg321 is killed
+            if [[ -n "$(pgrep mpg321)" ]]; then
+                if [[ "$(echo "$KEYPRESS - $STARTED" | bc)" -ge "$MIN_AGE" ]]; then
+                    if [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+                        kill -CONT "$(pgrep mpg321)"
+                        IS_PAUSED=false
+                    fi
+
+                    # A single SIGINT (ctrl-c) in mpg321 goes to the next song
+                    2>/dev/null 1>&2 killall -s SIGINT mpg321
+                    STARTED=$(echo "$(date +%s)")
+
+                    reload
+                else
+                    return
+                fi
+            else
+                redraw
+                return
             fi
-
-            # A single SIGINT (ctrl-c) in mpg321 goes to the next song
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
-
-            reload
         ;;
 
         # Go to $MUSIC_DIRECTORY
@@ -676,6 +695,7 @@ key() {
                 return
             fi
             IS_PAUSED=false
+            STARTED=$(echo "$(date +%s)")
             reload
         ;;
 
@@ -692,6 +712,7 @@ key() {
                 return
             fi
             IS_PAUSED=false
+            STARTED=$(echo "$(date +%s)")
             reload
         ;;
 
@@ -701,6 +722,7 @@ key() {
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &
             IS_PAUSED=false
+            STARTED=$(echo "$(date +%s)")
             reload
         ;;
 
