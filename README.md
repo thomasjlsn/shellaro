@@ -91,7 +91,7 @@ m -- toggle mute / unmute
 
 **$MUSIC_DIRECTORY** is the base directory that Shellaro uses (this assumes you have all your music contained within a single directory)
 
-the **$SHELLARO_FAV** variables are used to set the paths for directory shortcuts which use the 1-9 keys
+the **$SHORTCUT** variables are used to set the paths for directory shortcuts which use the 1-9 keys
 
 ## Where did the name come from?
 

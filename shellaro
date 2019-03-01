@@ -3,16 +3,52 @@
 # shellaro -- a terminal music player
 
 # CONFIG
+
+# The directory Shellaro looks in for music
 MUSIC_DIRECTORY=~/Music
-SHELLARO_FAV1=~/Music/LedZeppelin
-SHELLARO_FAV2=~/Music/MotleyCrue
-SHELLARO_FAV3=~/Music/SlightlyStoopid
-SHELLARO_FAV4=~/Music/Sublime
-SHELLARO_FAV5=~/Music/TheDoors
-SHELLARO_FAV6=~/Music/TheRollingStones
-SHELLARO_FAV7=~/Music/TheWho
-SHELLARO_FAV8=~/Music/VanHalen
-SHELLARO_FAV9=~/Music/OTHER
+
+# Shortcuts corresponding to number keys
+SHORTCUT_1=~/Music/LedZeppelin
+SHORTCUT_2=~/Music/MotleyCrue
+SHORTCUT_3=~/Music/SlightlyStoopid
+SHORTCUT_4=~/Music/Sublime
+SHORTCUT_5=~/Music/TheDoors
+SHORTCUT_6=~/Music/TheRollingStones
+SHORTCUT_7=~/Music/TheWho
+SHORTCUT_8=~/Music/VanHalen
+SHORTCUT_9=~/Music/OTHER
+
+# Status line
+COLOR_PLAYING=42 # Green
+COLOR_PAUSED=47 # White
+COLOR_STOPPED=47
+COLOR_MUTED=41 # Red
+
+# Cursor color
+COLOR_CURSOR=37
+
+# Directories
+COLOR_DIR=34 # Blue
+COLOR_DIR_BOLD=1 # Bold
+
+# Files
+COLOR_FILE=37 # White
+COLOR_FILE_BOLD=0 # Not bold
+
+# Other
+COLOR_OTHER=37
+COLOR_OTHER_BOLD=0
+
+# Marked files
+COLOR_MARKED=33 # Yellow
+COLOR_MARKED_BOLD=1
+ICON_MARKED="›"
+
+# Status line icons
+ICON_PLAYING="▷"
+ICON_PAUSED="◫"
+ICON_STOPPED="□"
+ICON_MUTED="MUTE"
 
 setup_terminal() {
     printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
@@ -35,15 +71,15 @@ clear_screen() {
 
 setup_options() {
     # Format for normal files
-    [[ $SHELLARO_FILE_FORMAT == *%f* ]] && {
-        file_pre="${SHELLARO_FILE_FORMAT/'%f'*}"
-        file_post="${SHELLARO_FILE_FORMAT/*'%f'}"
+    [[ $FILE_FORMAT == *%f* ]] && {
+        file_pre="${FILE_FORMAT/'%f'*}"
+        file_post="${FILE_FORMAT/*'%f'}"
     }
 
     # Format for marked files
-    [[ $SHELLARO_MARK_FORMAT == *%f* ]] && {
-        mark_pre="${SHELLARO_MARK_FORMAT/'%f'*}"
-        mark_post="${SHELLARO_MARK_FORMAT/*'%f'}"
+    [[ $MARK_FORMAT == *%f* ]] && {
+        mark_pre="${MARK_FORMAT/'%f'*}"
+        mark_post="${MARK_FORMAT/*'%f'}"
     }
 }
 
@@ -55,51 +91,36 @@ get_term_size() {
     ((max_items=LINES-2))
 }
 
-get_ls_colors() {
-    [[ -z $LS_COLORS ]] && {
-        SHELLARO_LS_COLORS=0
-        return
-    }
+set_initial_status() {
+    if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
+        IS_PAUSED=false
+    elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+        IS_PAUSED=true
+    fi
 
-    # Turn $LS_COLORS into an array
-    IFS=: read -ra ls_cols <<< "$LS_COLORS"
-
-    for ((i=0;i<${#ls_cols[@]};i++)); {
-        [[ ${ls_cols[i]} =~ ^\*[^\.] ]] &&
-            ls_patterns+="${ls_cols[i]/=*}|"
-
-        [[ ${ls_cols[i]} =~ ^(\*|\.) ]] && {
-            ls_cols[i]="${ls_cols[i]#\*}"
-            ls_cols[i]="ls_${ls_cols[i]#.}"
-        }
-    }
-
-    # Strip non-ascii characters
-    ls_cols=("${ls_cols[@]//[^a-zA-Z0-9=\\;]/_}")
-
-    # Store the patterns in a '|' separated string
-    ls_patterns="${ls_patterns//\*}"
-    ls_patterns="${ls_patterns%?}"
-
-    export "${ls_cols[@]}" &>/dev/null
+    if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+        IS_MUTED=true
+    else
+        IS_MUTED=false
+    fi
 }
 
 status_line() {
-    local mark_ui=" ${#marked_files[@]}"
+    local mark_ui="   [${#marked_files[@]}]"
 
     local NOW_PLAYING=$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')
 
     if [[ $IS_PAUSED == true ]]; then
-        local ICON="◫"
-        local COLOR="47"
+        local ICON="${ICON_PAUSED}"
+        local COLOR="${COLOR_PAUSED}"
     else
-        local ICON="▷"
-        local COLOR="42"
+        local ICON="${ICON_PLAYING}"
+        local COLOR="${COLOR_PLAYING}"
     fi
 
     if [[ $IS_MUTED == true ]]; then
-        local VOL="MUTE"
-        local COLOR="37"
+        local VOL="${ICON_MUTED}"
+        local COLOR="${COLOR_MUTED}"
     else
         local VOL=$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')
     fi
@@ -108,16 +129,16 @@ status_line() {
         local ICON="${ICON}"
         local COLOR="${COLOR}"
     else
-        local ICON="□"
-        local COLOR="47"
+        local ICON="${ICON_STOPPED}"
+        local COLOR="${COLOR_STOPPED}"
     fi
 
-    PWD_status_line="${ICON} ${VOL}  ${NOW_PLAYING}"
+    format_status_line="${ICON} ${VOL}  ${NOW_PLAYING}"
 
     printf '\e7\e[?6l\e[%sH\e[30;%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
            "${COLOR}" \
-           "${PWD_status_line:-/}" \
+           "${format_status_line:-/}" \
            "${marked_files[*]:+${mark_ui}}"
 }
 
@@ -149,7 +170,7 @@ read_dir() {
     cur_list=("${list[@]}")
 }
 
-format_status_line() {
+format_line() {
     local file_name="${list[$1]##*/}"
     local file_ext="${file_name##*.}"
     local format
@@ -160,35 +181,23 @@ format_status_line() {
         return
 
     elif [[ -d ${list[$1]} ]]; then
-        format+="\\e[${di:-1;3${SHELLARO_COL1:-2}}m"
+        format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
         suffix+='/'
 
-    # 'BASH_REMATCH' is an array that stores each REGEX match
-    elif [[ $SHELLARO_LS_COLORS == 1 &&
-            $ls_patterns &&
-            $file_name =~ ($ls_patterns)$ ]]; then
-        match="${BASH_REMATCH[0]}"
-        file_ext="ls_${match//[^a-zA-Z0-9=\\;]/_}"
-        format+="\\e[${!file_ext:-${fi:-37}}m"
-
-    # Color files based on file extension and LS_COLORS
-    elif [[ $SHELLARO_LS_COLORS == 1 &&
-            $file_ext != "$file_name" &&
-            $file_ext =~ ^[a-zA-Z0-9_]*$ ]]; then
-        file_ext="ls_${file_ext}"
-        format+="\\e[${!file_ext:-${fi:-37}}m"
+    elif [[ -f ${list[$1]} ]]; then
+        format+="\\e[${fi:-${COLOR_FILE_BOLD};${COLOR_FILE}}m"
 
     else
-        format+="\\e[${fi:-37}m"
+        format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
     fi
 
     # If the item is under the cursor
     (($1 == scroll)) &&
-        format+="\\e[1;3${SHELLARO_COL4:-7};7m"
+        format+="\\e[1;${COLOR_CURSOR};7m"
 
     # If the item is marked
     [[ ${marked_files[$1]} == "${list[$1]:-null}" ]] && {
-        format+="\\e[3${SHELLARO_COL3:-3}m› "
+        format+="\\e[${COLOR_MARKED_BOLD};${COLOR_MARKED}m${ICON_MARKED} "
     }
 
     # Escape the directory string
@@ -239,7 +248,7 @@ draw_dir() {
         ((i > scroll_start)) &&
             printf '\n'
 
-        format_status_line "$i"
+        format_line "$i"
     }
 
     # Move the cursor to its new position if it changed
@@ -282,19 +291,10 @@ mark() {
 
         # Clear line before changing it
         printf '\e[K'
-        format_status_line "$1"
+        format_line "$1"
     fi
 
-    case "$2" in
-        " ") file_program=(play) ;;
-    esac
-
     status_line
-}
-
-play() {
-    2>/dev/null 1>&2 mpg321 &
-    #TODO
 }
 
 open() {
@@ -307,7 +307,7 @@ open() {
 
     elif [[ -f $1 ]]; then
         # Figure out file type
-        nohup "${SHELLARO_OPENER:-${opener:-xdg-open}}" "$1" &>/dev/null &
+        nohup "${FILE_OPENER:-${opener:-xdg-open}}" "$1" &>/dev/null &
         disown
     fi
 }
@@ -438,7 +438,7 @@ key() {
     case "$1" in
 
         # Execute command
-        "${SHELLARO_COMMAND:=:}")
+        "${KEY_COMMAND:=:}")
             cmd_line ":"
 
             # Quit
@@ -449,11 +449,11 @@ key() {
         ;;
 
         # Open dir / Play song
-        # "${SHELLARO_CHILD5:=""}")
-        "${SHELLARO_CHILD1:=l}"|\
-        "${SHELLARO_CHILD2:=C}"|\
-        "${SHELLARO_CHILD3:=$'\eOC'}"|\
-        "${SHELLARO_CHILD4:=$'\e[C'}")
+        # "${KEY_CHILD5:=""}")
+        "${KEY_CHILD1:=l}"|\
+        "${KEY_CHILD2:=C}"|\
+        "${KEY_CHILD3:=$'\eOC'}"|\
+        "${KEY_CHILD4:=$'\e[C'}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ ${list[scroll]} == *.mp3 ]]; then
                 kill_music
@@ -466,12 +466,12 @@ key() {
         ;;
 
         # Go to the parent directory
-        "${SHELLARO_PARENT1:=h}"|\
-        "${SHELLARO_PARENT2:=D}"|\
-        "${SHELLARO_PARENT3:=$'\177'}"|\
-        "${SHELLARO_PARENT4:=$'\eOD'}"|\
-        "${SHELLARO_PARENT5:=$'\e[D'}"|\
-        "${SHELLARO_PARENT6:=$'\b'}")
+        "${KEY_PARENT1:=h}"|\
+        "${KEY_PARENT2:=D}"|\
+        "${KEY_PARENT3:=$'\177'}"|\
+        "${KEY_PARENT4:=$'\eOD'}"|\
+        "${KEY_PARENT5:=$'\e[D'}"|\
+        "${KEY_PARENT6:=$'\b'}")
             # If a search was done, clear the results and open the current dir
             if ((search == 1 && search_end_early != 1)); then
                 open "$PWD"
@@ -485,30 +485,30 @@ key() {
         ;;
 
         # Scroll down
-        "${SHELLARO_SCROLL_DOWN1:=j}"|\
-        "${SHELLARO_SCROLL_DOWN2:=$'\eOB'}"|\
-        "${SHELLARO_SCROLL_DOWN3:=$'\e[B'}"|\
-        "${SHELLARO_SCROLL_DOWN4:=B}")
+        "${KEY_SCROLL_DOWN1:=j}"|\
+        "${KEY_SCROLL_DOWN2:=$'\eOB'}"|\
+        "${KEY_SCROLL_DOWN3:=$'\e[B'}"|\
+        "${KEY_SCROLL_DOWN4:=B}")
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
 
-                format_status_line "$((scroll-1))"
+                format_line "$((scroll-1))"
                 printf '\n'
-                format_status_line "$scroll"
+                format_line "$scroll"
                 status_line
             }
         ;;
 
         # Scroll up
-        "${SHELLARO_SCROLL_UP1:=k}"|\
-        "${SHELLARO_SCROLL_UP1:=$'\eOA'}"|\
-        "${SHELLARO_SCROLL_UP1:=$'\e[A'}"|\
-        "${SHELLARO_SCROLL_UP2:=A}")
+        "${KEY_SCROLL_UP1:=k}"|\
+        "${KEY_SCROLL_UP1:=$'\eOA'}"|\
+        "${KEY_SCROLL_UP1:=$'\e[A'}"|\
+        "${KEY_SCROLL_UP2:=A}")
             ((scroll > 0)) && {
                 ((scroll--))
 
-                format_status_line "$((scroll+1))"
+                format_line "$((scroll+1))"
 
                 if ((y < 2)); then
                     printf '\e[1L'
@@ -517,14 +517,14 @@ key() {
                     ((y--))
                 fi
 
-                format_status_line "$scroll"
+                format_line "$scroll"
                 status_line
 
             }
         ;;
 
         # Go to top
-        "${SHELLARO_TO_TOP:=g}")
+        "${KEY_TO_TOP:=g}")
             ((scroll != 0)) && {
                 ((scroll=0))
                 redraw
@@ -532,7 +532,7 @@ key() {
         ;;
 
         # Go to bottom
-        "${SHELLARO_TO_BOTTOM:=G}")
+        "${KEY_TO_BOTTOM:=G}")
             ((scroll != list_total)) && {
                 ((scroll=list_total))
                 redraw
@@ -540,7 +540,7 @@ key() {
         ;;
 
         # Search
-        "${SHELLARO_SEARCH:=/}")
+        "${KEY_SEARCH:=/}")
             cmd_line "/" "search"
 
             # If the search came up empty, redraw the current dir
@@ -555,24 +555,23 @@ key() {
         ;;
 
         # Mark songs to play
-        "${SHELLARO_MARK_PLAYLIST:=" "}")
+        "${KEY_MARK_PLAYLIST:=" "}")
             mark "$scroll" "$1"
             # Scroll down one item when a file is selected
-            # TODO make enter key start playlist
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
 
-                format_status_line "$((scroll-1))"
+                format_line "$((scroll-1))"
                 printf '\n'
-                format_status_line "$scroll"
+                format_line "$scroll"
                 status_line
             }
 
         ;;
 
 
-        "${SHELLARO_PLAY_PLAYLIST:=""}")
+        "${KEY_PLAY_PLAYLIST:=""}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
 
             if ((${#marked_files[@]} != 0)); then
@@ -599,13 +598,13 @@ key() {
         ;;
 
         # Clear selection
-        "${SHELLARO_CLEAR:=x}")
+        "${KEY_CLEAR:=x}")
             marked_files=()
             redraw
         ;;
 
         # Pause (suspend or resume mpg321)
-        "${SHELLARO_PAUSE_PLAY:=p}")
+        "${KEY_PAUSE_PLAY:=p}")
             # If mpg321 is not running, play
             if [ -z "$(pgrep mpg321)" ]; then
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
@@ -634,7 +633,7 @@ key() {
         ;;
 
         # Next Song
-        "${SHELLARO_NEXT:=n}")
+        "${KEY_NEXT:=n}")
             # A single SIGINT (ctrl-c) in mpg321 goes to the next song
             2>/dev/null 1>&2 killall -s SIGINT mpg321
             sleep 0.2
@@ -643,14 +642,14 @@ key() {
         ;;
 
         # Go to $MUSIC_DIRECTORY
-        "${SHELLARO_GO_HOME1:=\`}"|\
-        "${SHELLARO_GO_HOME2:=0}"|\
-        "${SHELLARO_GO_HOME3:=~}")
+        "${KEY_GO_HOME1:=\`}"|\
+        "${KEY_GO_HOME2:=0}"|\
+        "${KEY_GO_HOME3:=~}")
             open "$MUSIC_DIRECTORY"
         ;;
 
         # Play All In PWD
-        "${SHELLARO_PLAY:=a}")
+        "${KEY_PLAY:=a}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
@@ -665,7 +664,7 @@ key() {
         ;;
 
         # Shuffle All In PWD
-        "${SHELLARO_SHUFFLE:=s}")
+        "${KEY_SHUFFLE:=s}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             if [[ -d ${list[scroll]} ]]; then
                 kill_music
@@ -680,7 +679,7 @@ key() {
         ;;
 
         # Shuffle All In $MUSIC_DIRECTORY
-        "${SHELLARO_SHUFFLE_ALL:=S}")
+        "${KEY_SHUFFLE_ALL:=S}")
             ((search == 1 && search_end_early != 1)) && open "$PWD"
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --quiet --shuffle &
@@ -688,22 +687,22 @@ key() {
         ;;
 
         # Volume Up
-        "${SHELLARO_VOL_UP1:=u}"|\
-        "${SHELLARO_VOL_UP2:=+}")
+        "${KEY_VOL_UP1:=u}"|\
+        "${KEY_VOL_UP2:=+}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
             redraw
         ;;
 
         # Volume Down
-        "${SHELLARO_VOL_DOWN1:=d}"|\
-        "${SHELLARO_VOL_DOWN2:=-}")
+        "${KEY_VOL_DOWN1:=d}"|\
+        "${KEY_VOL_DOWN2:=-}")
             2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
             redraw
         ;;
 
         # Set Volume
-        "${SHELLARO_SET_VOLUME1:=v}"|\
-        "${SHELLARO_SET_VOLUME2:==}")
+        "${KEY_SET_VOLUME1:=v}"|\
+        "${KEY_SET_VOLUME2:==}")
             cmd_line "Set Volume [0-100]: "
             # if cmd_reply is between 0 & 100
             if [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ]; then
@@ -713,7 +712,7 @@ key() {
         ;;
 
         # Mute / Unmute
-        "${SHELLARO_TOGGLE_MUTE:=m}")
+        "${KEY_TOGGLE_MUTE:=m}")
             2>/dev/null 1>&2 amixer -D pulse sset Master toggle
             if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
                 IS_MUTED=true
@@ -725,7 +724,7 @@ key() {
 
         # Jump To Favs
         [1-9])
-            favorite="SHELLARO_FAV${1}"
+            favorite="SHORTCUT_${1}"
             favorite="${!favorite}"
 
             [[ $favorite ]] &&
@@ -733,20 +732,20 @@ key() {
         ;;
 
         # Kill mpg321
-        "${SHELLARO_KILL:=K}")
+        "${KEY_KILL:=K}")
             kill_music
             reload
         ;;
 
         # Redraw, useful when bugs appear!
-        "${SHELLARO_RELOAD_DIR:=r}")
+        "${KEY_RELOAD_DIR:=r}")
             clear_screen
             redraw full
         ;;
 
         # Create a new instance of the program
         # and exit the current instance (for testing)
-        "${SHELLARO_RESTART:=&}")
+        "${KEY_RESTART:=R}")
             clear_screen
             sleep .2
             ~/GitHub/shellaro/shellaro "$0" && exit
@@ -766,7 +765,7 @@ main() {
     cd "${2:-$1}" &>/dev/null ||:
 
     [[ $1 == -v ]] && {
-        printf '%s\n' "shellaro 1.0"
+        printf '%s\n' "shellaro 1.1"
         exit
     }
 
@@ -777,9 +776,6 @@ main() {
     # affected versions of bash
     ((BASH_VERSINFO[0] > 3)) &&
         read_flags=(-t 0.05)
-
-    ((${SHELLARO_LS_COLORS:=1} == 1)) &&
-        get_ls_colors
 
     # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
     # 'nullglob':   Don't expand non-matching globs to themselves
@@ -800,6 +796,7 @@ main() {
 
     get_term_size
     setup_terminal
+    set_initial_status
     redraw full
 
     # Vintage infinite loop.
