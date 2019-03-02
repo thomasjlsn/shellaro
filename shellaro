@@ -5,50 +5,50 @@
 # CONFIG
 
 # The directory Shellaro looks in for music
-MUSIC_DIRECTORY=~/Music
+export MUSIC_DIRECTORY=~/Music
 
 # Shortcuts corresponding to number keys
-SHORTCUT_1=~/Music/LedZeppelin
-SHORTCUT_2=~/Music/MotleyCrue
-SHORTCUT_3=~/Music/SlightlyStoopid
-SHORTCUT_4=~/Music/Sublime
-SHORTCUT_5=~/Music/TheDoors
-SHORTCUT_6=~/Music/TheRollingStones
-SHORTCUT_7=~/Music/TheWho
-SHORTCUT_8=~/Music/VanHalen
-SHORTCUT_9=~/Music/OTHER
+export SHORTCUT_1=~/Music/LedZeppelin
+export SHORTCUT_2=~/Music/MotleyCrue
+export SHORTCUT_3=~/Music/SlightlyStoopid
+export SHORTCUT_4=~/Music/Sublime
+export SHORTCUT_5=~/Music/TheDoors
+export SHORTCUT_6=~/Music/TheRollingStones
+export SHORTCUT_7=~/Music/TheWho
+export SHORTCUT_8=~/Music/VanHalen
+export SHORTCUT_9=~/Music/OTHER
 
 # Status line
-COLOR_PLAYING=42 # Green
-COLOR_PAUSED=47 # White
-COLOR_STOPPED=47
-COLOR_MUTED=41 # Red
+export COLOR_PLAYING=42 # Green
+export COLOR_PAUSED=47 # White
+export COLOR_STOPPED=47
+export COLOR_MUTED=41 # Red
 
 # Cursor color
-COLOR_CURSOR=37
+export COLOR_CURSOR=37
 
 # Directories
-COLOR_DIR=34 # Blue
-COLOR_DIR_BOLD=1 # Bold
+export COLOR_DIR=34 # Blue
+export COLOR_DIR_BOLD=1 # Bold
 
 # Color of currently playing song
-COLOR_CURRENT_SONG=32 # Green
-COLOR_CURRENT_SONG_BOLD=1
+export COLOR_CURRENT_SONG=32 # Green
+export COLOR_CURRENT_SONG_BOLD=1
 
 # Other
-COLOR_OTHER=37
-COLOR_OTHER_BOLD=0
+export COLOR_OTHER=37
+export COLOR_OTHER_BOLD=0
 
 # Marked files
-COLOR_MARKED=33 # Yellow
-COLOR_MARKED_BOLD=1
-ICON_MARKED="›"
+export COLOR_MARKED=33 # Yellow
+export COLOR_MARKED_BOLD=1
+export ICON_MARKED="›"
 
 # Status line icons
-ICON_PLAYING="▷"
-ICON_PAUSED="◫"
-ICON_STOPPED="□"
-ICON_MUTED="MUTE"
+export ICON_PLAYING="▷"
+export ICON_PAUSED="◫"
+export ICON_STOPPED="□"
+export ICON_MUTED="MUTE"
 
 setup_terminal() {
     printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
@@ -67,20 +67,6 @@ reset_terminal() {
 clear_screen() {
     printf '\e[%sH\e[9999C\e[1J%b\e[1;%sr' \
            "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
-}
-
-setup_options() {
-    # Format for normal files
-    [[ $FILE_FORMAT == *%f* ]] && {
-        file_pre="${FILE_FORMAT/'%f'*}"
-        file_post="${FILE_FORMAT/*'%f'}"
-    }
-
-    # Format for marked files
-    [[ $MARK_FORMAT == *%f* ]] && {
-        mark_pre="${MARK_FORMAT/'%f'*}"
-        mark_post="${MARK_FORMAT/*'%f'}"
-    }
 }
 
 get_term_size() {
@@ -105,35 +91,39 @@ set_initial_status() {
             IS_MUTED=false
         fi
     fi
-    STARTED=$(echo "$(date +%s)")
+    STARTED=$(date +%s)
 }
 
 status_line() {
-    local mark_ui="   [${#marked_files[@]}]"
+    local mark_ui=
+    local COLOR=
+    local ICON=
+    local VOL=
 
-    NOW_PLAYING=$(readlink -f /proc/$(pgrep mpg321)/fd/3 | awk -F "/" '{print $NF}')
+    mark_ui="   [${#marked_files[@]}]"
+    NOW_PLAYING=$(readlink -f /proc/"$(pgrep mpg321)"/fd/3 | awk -F "/" '{print $NF}')
 
     if [[ $IS_PAUSED == true ]]; then
-        local ICON="${ICON_PAUSED}"
-        local COLOR="${COLOR_PAUSED}"
+        ICON="${ICON_PAUSED}"
+        COLOR="${COLOR_PAUSED}"
     else
-        local ICON="${ICON_PLAYING}"
-        local COLOR="${COLOR_PLAYING}"
+        ICON="${ICON_PLAYING}"
+        COLOR="${COLOR_PLAYING}"
     fi
 
     if [[ $IS_MUTED == true ]]; then
-        local VOL="${ICON_MUTED}"
-        local COLOR="${COLOR_MUTED}"
+        VOL="${ICON_MUTED}"
+        COLOR="${COLOR_MUTED}"
     else
-        local VOL=$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')
+        VOL="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
     fi
 
     if [ -n "$(pgrep mpg321)" ]; then
-        local ICON="${ICON}"
-        local COLOR="${COLOR}"
+        ICON="${ICON}"
+        COLOR="${COLOR}"
     else
-        local ICON="${ICON_STOPPED}"
-        local COLOR="${COLOR_STOPPED}"
+        ICON="${ICON_STOPPED}"
+        COLOR="${COLOR_STOPPED}"
     fi
 
     format_status_line="${ICON} ${VOL}  ${NOW_PLAYING}"
@@ -174,10 +164,11 @@ read_dir() {
 }
 
 format_line() {
-    local file_name="${list[$1]##*/}"
-    local file_ext="${file_name##*.}"
+    local file_name=
     local format
     local suffix
+
+    file_name="${list[$1]##*/}"
 
     # If the dir is empty, return
     if [[ -z ${list[$1]} ]]; then
@@ -212,9 +203,11 @@ format_line() {
 
 draw_dir() {
     # Print the max directory items that fit in the scroll area
-    local scroll_start="$scroll"
+    local scroll_start=
     local scroll_new_pos
     local scroll_end
+
+    scroll_start="$scroll"
 
     # When going up the directory tree, place the cursor on the position
     # of the previous directory
@@ -278,7 +271,7 @@ mark() {
     if [[ $1 == all ]]; then
         if ((${#marked_files[@]} != ${#list[@]})); then
             marked_files=("${list[@]}")
-            mark_dir="$PWD"
+            export mark_dir="$PWD"
         else
             marked_files=()
         fi
@@ -290,7 +283,7 @@ mark() {
 
         else
             marked_files[$1]="${list[$1]}"
-            mark_dir="$PWD"
+            export mark_dir="$PWD"
         fi
 
         # Clear line before changing it
@@ -305,7 +298,7 @@ open() {
     if [[ -d $1/ ]]; then
         search=
         search_end_early=
-        previous_dir="$PWD"
+        export previous_dir="$PWD"
         cd "${1:-/}" ||:
         redraw full
 
@@ -472,7 +465,7 @@ key() {
                 kill_music
                 2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                 IS_PAUSED=false
-                STARTED=$(echo "$(date +%s)")
+                STARTED=$(date +%s)
                 reload
             elif [[ -d ${list[scroll]} ]]; then
                 open "${list[scroll]}"
@@ -617,7 +610,7 @@ key() {
                 open "${list[scroll]}"
             fi
             IS_PAUSED=false
-            STARTED=$(echo "$(date +%s)")
+            STARTED=$(date +%s)
             redraw
 
         ;;
@@ -630,7 +623,10 @@ key() {
 
         # Pause (suspend or resume mpg321)
         "${KEY_PAUSE_PLAY:=p}")
-            local MPG321_PID=$(pgrep mpg321)
+            local MPG321_PID=
+
+            MPG321_PID=$(pgrep mpg321)
+
             # If mpg321 is not running, play
             if [ -z "${MPG321_PID}" ]; then
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
@@ -639,13 +635,13 @@ key() {
                 if [[ -d ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
                     IS_PAUSED=false
-                    STARTED=$(echo "$(date +%s)")
+                    STARTED=$(date +%s)
 
                 # If list item is a file, play it
                 elif [[ -f ${list[scroll]} ]]; then
                     2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
                     IS_PAUSED=false
-                    STARTED=$(echo "$(date +%s)")
+                    STARTED=$(date +%s)
                 fi
 
             # Elif process is running; suspend
@@ -657,7 +653,7 @@ key() {
             elif [[ $(ps -o s= -p "${MPG321_PID}") == "T" ]]; then
                 kill -CONT "${MPG321_PID}"
                 IS_PAUSED=false
-                STARTED=$(echo "$(date +%s)")
+                STARTED=$(date +%s)
             fi
 
             reload
@@ -665,8 +661,12 @@ key() {
 
         # Next Song
         "${KEY_NEXT:=n}")
-            local MIN_AGE=2 # seconds
-            local KEYPRESS=$(date +%s)
+            local MIN_AGE=
+            local KEYPRESS=
+
+            MIN_AGE=2 # seconds
+            KEYPRESS=$(date +%s)
+
             # Don't allow the user to skip to the next song within the first 2 seconds,
             # otherwise mpg321 is killed
             if [[ -n "$(pgrep mpg321)" ]]; then
@@ -678,7 +678,7 @@ key() {
 
                     # A single SIGINT (ctrl-c) in mpg321 goes to the next song
                     2>/dev/null 1>&2 killall -s SIGINT mpg321
-                    STARTED=$(echo "$(date +%s)")
+                    STARTED=$(date +%s)
 
                     reload
                 else
@@ -710,7 +710,7 @@ key() {
                 return
             fi
             IS_PAUSED=false
-            STARTED=$(echo "$(date +%s)")
+            STARTED=$(date +%s)
             reload
         ;;
 
@@ -727,7 +727,7 @@ key() {
                 return
             fi
             IS_PAUSED=false
-            STARTED=$(echo "$(date +%s)")
+            STARTED=$(date +%s)
             reload
         ;;
 
@@ -737,7 +737,7 @@ key() {
             kill_music
             2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &
             IS_PAUSED=false
-            STARTED=$(echo "$(date +%s)")
+            STARTED=$(date +%s)
             reload
         ;;
 
@@ -857,13 +857,12 @@ main() {
     mkdir -p "${HOME}/.cache/shellaro"
     touch "${HOME}/.cache/shellaro/playlist"
 
-    open "$MUSIC_DIRECTORY"
 
-    setup_options
+    set_initial_status
 
     get_term_size
     setup_terminal
-    set_initial_status
+    open "$MUSIC_DIRECTORY"
     redraw full
 
     # Vintage infinite loop.
