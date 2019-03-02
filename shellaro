@@ -100,7 +100,7 @@ status_line() {
     local ICON=
     local VOL=
 
-    mark_ui="   [${#marked_files[@]}]"
+    mark_ui="[${#marked_files[@]}]"
     NOW_PLAYING=$(readlink -f /proc/"$(pgrep mpg321)"/fd/3 | awk -F "/" '{print $NF}')
 
     if [[ $IS_PAUSED == true ]]; then
@@ -126,13 +126,12 @@ status_line() {
         COLOR="${COLOR_STOPPED}"
     fi
 
-    format_status_line="${ICON} ${VOL}  ${NOW_PLAYING}"
+    format_status_line="${ICON} ${VOL}${marked_files[*]:+${mark_ui}} ${NOW_PLAYING}"
 
-    printf '\e7\e[?6l\e[%sH\e[30;%sm %s%s\e[K\e[m\n\e[K\e[?6h\e8' \
+    printf '\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
            "${COLOR}" \
-           "${format_status_line:-/}" \
-           "${marked_files[*]:+${mark_ui}}"
+           "${format_status_line:-/}"
 }
 
 read_dir() {
@@ -504,7 +503,7 @@ key() {
                 format_line "$((scroll-1))"
                 printf '\n'
                 format_line "$scroll"
-                status_line
+                #status_line
             }
         ;;
 
@@ -526,7 +525,7 @@ key() {
                 fi
 
                 format_line "$scroll"
-                status_line
+                #status_line
             }
         ;;
 
@@ -548,11 +547,16 @@ key() {
 
         # Go to current song
         "${KEY_FIND_CURRENT_SONG:=f}")
-            open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
-                | awk -F "/" '{print $NF}')" \
-                | awk -F "/" '{$NF=""; print $0}' \
-                | sed s/' '/'\/'/g)"
-            reload
+            # If mpg231 is not running, don't search
+            if [ -z "$(pgrep mpg321)" ]; then
+                return
+            else
+                open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
+                    | awk -F "/" '{print $NF}')" \
+                    | awk -F "/" '{$NF=""; print $0}' \
+                    | sed s/' '/'\/'/g)"
+                reload
+            fi
         ;;
 
         # Search
@@ -572,8 +576,14 @@ key() {
 
         # Mark songs to play
         "${KEY_MARK_PLAYLIST:=" "}")
-            mark "$scroll" "$1"
-            # Scroll down one item when a file is selected
+            # Don't mark dirs
+            if [ -d ${list[scroll]} ]; then
+                :
+            else
+                mark "$scroll" "$1"
+            fi
+
+            # Scroll down one item
             ((scroll < list_total)) && {
                 ((scroll++))
                 ((y < max_items )) && ((y++))
@@ -582,7 +592,7 @@ key() {
                 printf '\n'
                 format_line "$scroll"
                 status_line
-            }
+                }
 
         ;;
 
@@ -616,7 +626,8 @@ key() {
         ;;
 
         # Clear selection
-        "${KEY_CLEAR:=x}")
+        "${KEY_CLEAR1:=c}"|\
+        "${KEY_CLEAR2:=x}")
             marked_files=()
             redraw
         ;;
