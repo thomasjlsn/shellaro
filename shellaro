@@ -554,7 +554,7 @@ key() {
         ;;
 
         # Go to current song
-        "${KEY_FIND_CURRENT_SONG:=c}")
+        "${KEY_FIND_CURRENT_SONG:=f}")
             open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
                 | awk -F "/" '{print $NF}')" \
                 | awk -F "/" '{$NF=""; print $0}' \
