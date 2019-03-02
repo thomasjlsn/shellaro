@@ -453,6 +453,12 @@ key() {
                 clear
                 exit
             fi
+
+            if [[ "$cmd_reply" == "debug" ]]; then
+                set -x
+                DEBUG=true
+                redraw full
+            fi
         ;;
 
         # Open dir / Play song
@@ -786,9 +792,15 @@ key() {
         # Create a new instance of the program
         # and exit the current instance (for testing)
         "${KEY_RESTART:=R}")
-            clear_screen
-            sleep .2
-            ~/GitHub/shellaro/shellaro "$0" && exit
+            if [[ $DEBUG == true ]]; then
+                set +x
+                DEBUG=false
+                redraw full
+            else
+                clear_screen
+                sleep .2
+                ~/GitHub/shellaro/shellaro "$0" && exit
+            fi
         ;;
 
         # Quit
@@ -804,9 +816,14 @@ main() {
     # Do nothing if cd fails
     cd "${2:-$1}" &>/dev/null ||:
 
-    [[ $1 == -v ]] && {
+    [[ $1 == --version ]] || [[ $1 == -v ]] && {
         printf '%s\n' "shellaro 1.1"
         exit
+    }
+
+    [[ $1 == --debug ]] || [[ "$1" == "-d" ]] && {
+        set -x
+        DEBUG=true
     }
 
     # bash 5 and some versions of bash 4 don't allow SIGWINCH to interrupt
