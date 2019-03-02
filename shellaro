@@ -534,7 +534,6 @@ key() {
 
                 format_line "$scroll"
                 status_line
-
             }
         ;;
 
@@ -552,6 +551,15 @@ key() {
                 ((scroll=list_total))
                 redraw
             }
+        ;;
+
+        # Go to current song
+        "${KEY_FIND_CURRENT_SONG:=c}")
+            open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
+                | awk -F "/" '{print $NF}')" \
+                | awk -F "/" '{$NF=""; print $0}' \
+                | sed s/' '/'\/'/g)"
+            reload
         ;;
 
         # Search
@@ -622,8 +630,9 @@ key() {
 
         # Pause (suspend or resume mpg321)
         "${KEY_PAUSE_PLAY:=p}")
+            local MPG321_PID=$(pgrep mpg321)
             # If mpg321 is not running, play
-            if [ -z "$(pgrep mpg321)" ]; then
+            if [ -z "${MPG321_PID}" ]; then
                 ((search == 1 && search_end_early != 1)) && open "$PWD"
 
                 # If list item is a dir, play all in dir
@@ -640,13 +649,13 @@ key() {
                 fi
 
             # Elif process is running; suspend
-            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
-                kill -STOP "$(pgrep mpg321)"
+            elif [[ $(ps -o s= -p "${MPG321_PID}") == "S" ]]; then
+                kill -STOP "${MPG321_PID}"
                 IS_PAUSED=true
 
             # Elif suspended; resume
-            elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
-                kill -CONT "$(pgrep mpg321)"
+            elif [[ $(ps -o s= -p "${MPG321_PID}") == "T" ]]; then
+                kill -CONT "${MPG321_PID}"
                 IS_PAUSED=false
                 STARTED=$(echo "$(date +%s)")
             fi
@@ -787,6 +796,7 @@ key() {
         "${KEY_RELOAD_DIR:=r}")
             clear_screen
             redraw full
+            reload
         ;;
 
         # Create a new instance of the program

@@ -41,6 +41,8 @@ backspace -- go to parent dir
 
 / -- search
 
+c -- locate current song
+
 (arrow keys also work for navigation)
 ```
 
