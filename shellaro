@@ -661,12 +661,11 @@ exit_program () {
     if [[ "$DEBUG" == true ]]; then
         set +x
         DEBUG=false
-        redraw full
-    else
-        clear
-        echo "" > "${HOME}/.cache/shellaro/playlist"
-        exit
     fi
+
+    clear
+    echo "" > "${HOME}/.cache/shellaro/playlist"
+    exit
 }
 
 mute_or_unmute () {
@@ -700,6 +699,12 @@ execute_command () {
 
     if [[ "$cmd_reply" == "debug" ]]; then
         set -x
+        DEBUG=true
+        redraw full
+    fi
+
+    if [[ "$cmd_reply" == "debug-exec" ]]; then
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit 
         DEBUG=true
         redraw full
     fi
@@ -845,6 +850,11 @@ main() {
 
     [[ $1 == --debug ]] || [[ "$1" == "-d" ]] && {
         set -x
+        DEBUG=true
+    }
+
+    [[ $1 == --debug-exec ]] || [[ "$1" == "-D" ]] && {
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit 
         DEBUG=true
     }
 

@@ -12,12 +12,27 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - volume controls
 - find & auto play (eg. Searching 'stopme' would match & auto-play DontStopMeNow.mp3. Searching 'oor' would match and play everything in 'TheDoors' directory)
 
+## Table of Contents
+
+* [Dependencies](#dependencies)
+* [Usage](#usage)
+    * [Navigation](#navigation)
+    * [Play](#play)
+    * [Playlists](#playlists)
+    * [Volume](#volume)
+* [Configuration](#configuration)
+* [F.A.Q.](#faq)
+
 ## Dependencies
 
-- amixer
-- bash
 - [mpg321](http://mpg321.sourceforge.net/)
+- amixer
+- awk
+- bash
+- grep
 - pgrep
+- readlink
+- sed
 
 ## Usage
 
@@ -93,7 +108,7 @@ v -- set volume [0 - 100]
 m -- toggle mute / unmute
 ```
 
-## Configuring Shellaro
+## Configuration
 
 **$MUSIC_DIRECTORY** is the base directory that Shellaro uses (this assumes you have all your music contained within a single directory)
 
@@ -129,6 +144,18 @@ background colors:
 
 the **$ICON\*BOLD** variables can be used to set whether or not a color will be bold, 1 for bold, 0 for normal
 
-## Where did the name come from?
+## F.A.Q.
+
+### Where did the name come from?
 
 Shellaro is a combinaton of "shell" (in reference to bash) & "[Collaro](https://en.wikipedia.org/wiki/Collaro)" (an old phonograph manufacturer)
+
+### Help, locate doesn't work!
+
+if `;` (locate) is not working, the most likely cause is a non existant path in locate's databse (eg. a song was moved/deleted). Try updating mlocate.db with:
+
+```
+sudo updatedb
+```
+
+locate should now be working fine!
