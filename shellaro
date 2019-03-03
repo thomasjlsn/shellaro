@@ -103,7 +103,7 @@ status_line() {
     mark_ui="[${#marked_files[@]}]"
     NOW_PLAYING=$(readlink -f /proc/"$(pgrep mpg321)"/fd/3 | awk -F "/" '{print $NF}')
 
-    if [[ $IS_PAUSED == true ]]; then
+    if [[ "$IS_PAUSED" == true ]]; then
         ICON="${ICON_PAUSED}"
         COLOR="${COLOR_PAUSED}"
     else
@@ -111,7 +111,7 @@ status_line() {
         COLOR="${COLOR_PLAYING}"
     fi
 
-    if [[ $IS_MUTED == true ]]; then
+    if [[ "$IS_MUTED" == true ]]; then
         VOL="${ICON_MUTED}"
         COLOR="${COLOR_MUTED}"
     else
@@ -592,7 +592,7 @@ key() {
                 printf '\n'
                 format_line "$scroll"
                 status_line
-                }
+            }
 
         ;;
 
@@ -674,14 +674,17 @@ key() {
         "${KEY_NEXT:=n}")
             local MIN_AGE=
             local KEYPRESS=
+            local AGE=
 
             MIN_AGE=2 # seconds
             KEYPRESS=$(date +%s)
+            let "AGE=$KEYPRESS-$STARTED"
 
             # Don't allow the user to skip to the next song within the first 2 seconds,
             # otherwise mpg321 is killed
             if [[ -n "$(pgrep mpg321)" ]]; then
-                if [[ "$(echo "$KEYPRESS - $STARTED" | bc)" -ge "$MIN_AGE" ]]; then
+                if [[ "$AGE" -ge "$MIN_AGE" ]]; then
+
                     if [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
                         kill -CONT "$(pgrep mpg321)"
                         IS_PAUSED=false
@@ -813,22 +816,20 @@ key() {
         # Create a new instance of the program
         # and exit the current instance (for testing)
         "${KEY_RESTART:=R}")
-            if [[ $DEBUG == true ]]; then
-                set +x
-                DEBUG=false
-                redraw full
-            else
-                clear_screen
-                sleep .2
-                ~/GitHub/shellaro/shellaro "$0" && exit
-            fi
+            ~/GitHub/shellaro/shellaro "$0" && exit
         ;;
 
         # Quit
         q|Q)
-            clear
-            echo "" > "${HOME}/.cache/shellaro/playlist"
-            exit
+            if [[ "$DEBUG" == true ]]; then
+                set +x
+                DEBUG=false
+                redraw full
+            else
+                clear
+                echo "" > "${HOME}/.cache/shellaro/playlist"
+                exit
+            fi
         ;;
     esac
 }
