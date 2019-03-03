@@ -96,41 +96,41 @@ set_initial_status() {
 
 status_line() {
     local mark_ui=
-    local COLOR=
-    local ICON=
-    local VOL=
+    local color=
+    local icon=
+    local volume=
 
     mark_ui="[${#marked_files[@]}]"
     NOW_PLAYING=$(readlink -f /proc/"$(pgrep mpg321)"/fd/3 | awk -F "/" '{print $NF}')
 
     if [[ "$IS_PAUSED" == true ]]; then
-        ICON="${ICON_PAUSED}"
-        COLOR="${COLOR_PAUSED}"
+        icon="${ICON_PAUSED}"
+        color="${COLOR_PAUSED}"
     else
-        ICON="${ICON_PLAYING}"
-        COLOR="${COLOR_PLAYING}"
+        icon="${ICON_PLAYING}"
+        color="${COLOR_PLAYING}"
     fi
 
     if [[ "$IS_MUTED" == true ]]; then
-        VOL="${ICON_MUTED}"
-        COLOR="${COLOR_MUTED}"
+        volume="${ICON_MUTED}"
+        color="${COLOR_MUTED}"
     else
-        VOL="$(amixer -D pulse get Master | \grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
+        volume="$(amixer -D pulse get Master | \grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
     fi
 
     if [ -n "$(pgrep mpg321)" ]; then
-        ICON="${ICON}"
-        COLOR="${COLOR}"
+        icon="${icon}"
+        color="${color}"
     else
-        ICON="${ICON_STOPPED}"
-        COLOR="${COLOR_STOPPED}"
+        icon="${ICON_STOPPED}"
+        color="${COLOR_STOPPED}"
     fi
 
-    format_status_line="${ICON} ${VOL}${marked_files[*]:+${mark_ui}} ${NOW_PLAYING}"
+    format_status_line="${icon} ${volume}${marked_files[*]:+${mark_ui}} ${NOW_PLAYING}"
 
     printf '\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
-           "${COLOR}" \
+           "${color}" \
            "${format_status_line:-/}"
 }
 
@@ -433,406 +433,406 @@ reload () {
     redraw
 }
 
+next_song () {
+    local min_age=
+    local keypress=
+    local age=
+    local mpg321_pid=
+
+    mpg321_pid=$(pgrep mpg321)
+
+    min_age=2 # seconds
+    keypress=$(date +%s)
+    let "age=$keypress-$STARTED"
+
+    # Don't allow the user to skip to the next song within the first 2 seconds,
+    # otherwise mpg321 is killed
+    if [[ -n "${mpg321_pid}" ]]; then
+        if [[ "$age" -ge "$min_age" ]]; then
+
+            if [[ $(awk 'NR==3{print $2}' "/proc/${mpg321_pid}/status") == "T" ]]; then
+                kill -CONT "${mpg321_pid}"
+                IS_PAUSED=false
+            fi
+
+            # A single SIGINT (ctrl-c) in mpg321 goes to the next song
+            2>/dev/null 1>&2 killall -s SIGINT mpg321
+            STARTED=$(date +%s)
+
+            reload
+        else
+            return
+        fi
+    else
+        redraw
+        return
+    fi
+}
+
+pause_or_play () {
+    local mpg321_pid=
+
+    mpg321_pid=$(pgrep mpg321)
+
+    # If mpg321 is not running, play
+    if [ -z "${mpg321_pid}" ]; then
+        ((search == 1 && search_end_early != 1)) && open "$PWD"
+
+        # If list item is a dir, play all in dir
+        if [[ -d ${list[scroll]} ]]; then
+            2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
+            IS_PAUSED=false
+            STARTED=$(date +%s)
+
+        # If list item is a file, play it
+        elif [[ -f ${list[scroll]} ]]; then
+            2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
+            IS_PAUSED=false
+            STARTED=$(date +%s)
+        fi
+
+    # Elif process is running; suspend
+    elif [[ $(awk 'NR==3{print $2}' "/proc/${mpg321_pid}/status") == "S" ]]; then
+        kill -STOP "${mpg321_pid}"
+        IS_PAUSED=true
+
+    # Elif suspended; resume
+    elif [[ $(awk 'NR==3{print $2}' "/proc/${mpg321_pid}/status") == "T" ]]; then
+        kill -CONT "${mpg321_pid}"
+        IS_PAUSED=false
+        STARTED=$(date +%s)
+    fi
+
+    reload
+}
+
+play_all_in_dir () {
+    ((search == 1 && search_end_early != 1)) && open "$PWD"
+    if [[ -d ${list[scroll]} ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
+    elif [[ -f ${list[scroll]} ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 ./*.mp3 &
+    else
+        return
+    fi
+    IS_PAUSED=false
+    STARTED=$(date +%s)
+    reload
+}
+
+shuffle_all_in_dir () {
+    ((search == 1 && search_end_early != 1)) && open "$PWD"
+    if [[ -d ${list[scroll]} ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
+    elif [[ -f ${list[scroll]} ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &
+    else
+        return
+    fi
+    IS_PAUSED=false
+    STARTED=$(date +%s)
+    reload
+}
+
+mark_song_for_playlist () {
+    # Don't mark dirs
+    if [ -d ${list[scroll]} ]; then
+        :
+    else
+        mark "$scroll" "$1"
+    fi
+
+    # Scroll down one item
+    ((scroll < list_total)) && {
+        ((scroll++))
+        ((y < max_items )) && ((y++))
+
+        format_line "$((scroll-1))"
+        printf '\n'
+        format_line "$scroll"
+        status_line
+    }
+}
+
+play_marked_songs () {
+    ((search == 1 && search_end_early != 1)) && open "$PWD"
+
+    if ((${#marked_files[@]} != 0)); then
+        playlist_file="${HOME}/.cache/shellaro/playlist"
+        # Save marked files to a file and open them for editing
+        printf '%s\n' "${marked_files[@]}" > "$playlist_file"
+
+        kill_music
+        2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
+
+        marked_files=()
+        reload
+
+    elif [[ ${list[scroll]} == *.mp3 ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
+        reload
+
+    elif [[ -d ${list[scroll]} ]]; then
+        open "${list[scroll]}"
+    fi
+    IS_PAUSED=false
+    STARTED=$(date +%s)
+    redraw
+}
+
+find_current_song () {
+    # If mpg231 is not running, don't search
+    if [ -z "$(pgrep mpg321)" ]; then
+        return
+    else
+        open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
+            | awk -F "/" '{print $NF}')" \
+            | awk -F "/" '{$NF=""; print $0}' \
+            | sed s/' '/'\/'/g)"
+        reload
+    fi
+}
+
+find_and_play () {
+    cmd_line "locate: "
+
+    if [[ -n "$cmd_reply" ]]; then
+        search_result="$(locate -iqt ${cmd_reply} | sed q)"
+
+        if [[ "$search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+            if [ -d $search_result ];then
+                kill_music
+                2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &
+                reload
+
+            elif [[ "$search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
+                kill_music
+                2>/dev/null 1>&2 mpg321 "${search_result}" &
+                reload
+            else
+                search_result="$(locate -qt ${cmd_reply} | sed q)"
+
+                if [[ "$search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+                    if [ -d $search_result ]; then
+                        kill_music
+                        2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &
+                        reload
+
+                    elif [[ "$search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
+                        kill_music
+                        2>/dev/null 1>&2 mpg321 "${search_result}" &
+                        reload
+                    fi
+                fi
+            fi
+        fi
+    fi
+}
+
+search_in_dir () {
+    cmd_line "/" "search"
+
+    # If the search came up empty, redraw the current dir
+    if [[ -z ${list[*]} || -z $cmd_reply ]]; then
+        list=("${cur_list[@]}")
+        ((list_total=${#list[@]}-1))
+        redraw
+        search=
+    else
+        search=1
+    fi
+}
+
+shuffle_all () {
+    ((search == 1 && search_end_early != 1)) && open "$PWD"
+    kill_music
+    2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &
+    IS_PAUSED=false
+    STARTED=$(date +%s)
+    reload
+}
+
+exit_program () {
+    if [[ "$DEBUG" == true ]]; then
+        set +x
+        read_flags=(-t 0.05)
+        DEBUG=false
+        redraw full
+    else
+        clear
+        echo "" > "${HOME}/.cache/shellaro/playlist"
+        exit
+    fi
+}
+
+mute_or_unmute () {
+    2>/dev/null 1>&2 amixer -D pulse sset Master toggle
+    if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
+        IS_MUTED=true
+    else
+        IS_MUTED=false
+    fi
+    redraw
+}
+
+set_volume () {
+    cmd_line "volume: "
+    # if cmd_reply is between 0 & 100
+    if [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ]; then
+        2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
+    fi
+    redraw
+}
+#source ~/GitHub/shellaro/volume.sh
+
+execute_command () {
+    cmd_line ":"
+
+    # Quit
+    if [[ "$cmd_reply" == "q" ]]; then
+        clear
+        exit
+    fi
+
+    if [[ "$cmd_reply" == "debug" ]]; then
+        set -x
+        read_flags=(-t 0.50)
+        DEBUG=true
+        redraw full
+    fi
+}
+
+go_to_child () {
+    ((search == 1 && search_end_early != 1)) && open "$PWD"
+    if [[ ${list[scroll]} == *.mp3 ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
+        IS_PAUSED=false
+        STARTED=$(date +%s)
+        reload
+    elif [[ -d ${list[scroll]} ]]; then
+        open "${list[scroll]}"
+    fi
+    redraw
+}
+
+go_to_parent () {
+    # If a search was done, clear the results and open the current dir
+    if ((search == 1 && search_end_early != 1)); then
+        open "$PWD"
+
+    # If '$PWD' is not $MUSIC_DIRECTORY or a subdirectory
+    # of, don't go to parent
+    elif [[ "$PWD" = *"$MUSIC_DIRECTORY/"* ]]; then
+        find_previous=1
+        open "${PWD%/*}"
+    fi
+}
+
+scroll_down () {
+    ((scroll < list_total)) && {
+        ((scroll++))
+        ((y < max_items )) && ((y++))
+
+        format_line "$((scroll-1))"
+        printf '\n'
+        format_line "$scroll"
+        #status_line
+    }
+}
+
+scroll_up () {
+    ((scroll > 0)) && {
+        ((scroll--))
+
+        format_line "$((scroll+1))"
+
+        if ((y < 2)); then
+            printf '\e[1L'
+        else
+            printf '\e[A'
+            ((y--))
+        fi
+
+        format_line "$scroll"
+        #status_line
+    }
+}
+
 key() {
     case "$1" in
 
-        # Execute command
-        "${KEY_COMMAND:=:}")
-            cmd_line ":"
+        :) execute_command ;;
 
-            # Quit
-            if [[ "$cmd_reply" == "q" ]]; then
-                clear
-                exit
-            fi
+        l|C|$'\eOC'|$'\e[C') go_to_child ;;
 
-            if [[ "$cmd_reply" == "debug" ]]; then
-                set -x
-                read_flags=(-t 0.50)
-                DEBUG=true
-                redraw full
-            fi
-        ;;
+        h|D|$'\eOD'|$'\e[D'|$'\b'|$'\177') go_to_parent ;;
 
-        # Open dir / Play song
-        # "${KEY_CHILD5:=""}")
-        "${KEY_CHILD1:=l}"|\
-        "${KEY_CHILD2:=C}"|\
-        "${KEY_CHILD3:=$'\eOC'}"|\
-        "${KEY_CHILD4:=$'\e[C'}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-            if [[ ${list[scroll]} == *.mp3 ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-                IS_PAUSED=false
-                STARTED=$(date +%s)
-                reload
-            elif [[ -d ${list[scroll]} ]]; then
-                open "${list[scroll]}"
-            fi
-            redraw
-        ;;
+        j|B|$'\eOB'|$'\e[B') scroll_down ;;
 
-        # Go to the parent directory
-        "${KEY_PARENT1:=h}"|\
-        "${KEY_PARENT2:=D}"|\
-        "${KEY_PARENT3:=$'\177'}"|\
-        "${KEY_PARENT4:=$'\eOD'}"|\
-        "${KEY_PARENT5:=$'\e[D'}"|\
-        "${KEY_PARENT6:=$'\b'}")
-            # If a search was done, clear the results and open the current dir
-            if ((search == 1 && search_end_early != 1)); then
-                open "$PWD"
+        k|A|$'\eOA'|$'\e[A') scroll_up ;;
 
-            # If '$PWD' is not $MUSIC_DIRECTORY or a subdirectory
-            # of, don't go to parent
-            elif [[ "$PWD" = *"$MUSIC_DIRECTORY/"* ]]; then
-                find_previous=1
-                open "${PWD%/*}"
-            fi
-        ;;
+        # Jump to top
+        g) ((scroll != 0)) && ((scroll=0)); redraw ;;
 
-        # Scroll down
-        "${KEY_SCROLL_DOWN1:=j}"|\
-        "${KEY_SCROLL_DOWN2:=$'\eOB'}"|\
-        "${KEY_SCROLL_DOWN3:=$'\e[B'}"|\
-        "${KEY_SCROLL_DOWN4:=B}")
-            ((scroll < list_total)) && {
-                ((scroll++))
-                ((y < max_items )) && ((y++))
+        # Jump to bottom
+        G) ((scroll != list_total)) && ((scroll=list_total)); redraw ;;
 
-                format_line "$((scroll-1))"
-                printf '\n'
-                format_line "$scroll"
-                #status_line
-            }
-        ;;
+        /) search_in_dir ;;
 
-        # Scroll up
-        "${KEY_SCROLL_UP1:=k}"|\
-        "${KEY_SCROLL_UP1:=$'\eOA'}"|\
-        "${KEY_SCROLL_UP1:=$'\e[A'}"|\
-        "${KEY_SCROLL_UP2:=A}")
-            ((scroll > 0)) && {
-                ((scroll--))
+        \;) find_and_play ;;
 
-                format_line "$((scroll+1))"
+        f) find_current_song ;;
 
-                if ((y < 2)); then
-                    printf '\e[1L'
-                else
-                    printf '\e[A'
-                    ((y--))
-                fi
+        " ") mark_song_for_playlist ;;
 
-                format_line "$scroll"
-                #status_line
-            }
-        ;;
+        # "" ENTER key
+        "") play_marked_songs ;;
 
-        # Go to top
-        "${KEY_TO_TOP:=g}")
-            ((scroll != 0)) && {
-                ((scroll=0))
-                redraw
-            }
-        ;;
+        # " " SPACE key, clear selection
+        x|c) marked_files=(); redraw;;
 
-        # Go to bottom
-        "${KEY_TO_BOTTOM:=G}")
-            ((scroll != list_total)) && {
-                ((scroll=list_total))
-                redraw
-            }
-        ;;
+        p) pause_or_play ;;
 
-        # Go to current song
-        "${KEY_FIND_CURRENT_SONG:=f}")
-            # If mpg231 is not running, don't search
-            if [ -z "$(pgrep mpg321)" ]; then
-                return
-            else
-                open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
-                    | awk -F "/" '{print $NF}')" \
-                    | awk -F "/" '{$NF=""; print $0}' \
-                    | sed s/' '/'\/'/g)"
-                reload
-            fi
-        ;;
+        n) next_song ;;
 
-        # Search
-        "${KEY_SEARCH:=/}")
-            cmd_line "/" "search"
+        \`|~|0) open "$MUSIC_DIRECTORY" ;;
 
-            # If the search came up empty, redraw the current dir
-            if [[ -z ${list[*]} || -z $cmd_reply ]]; then
-                list=("${cur_list[@]}")
-                ((list_total=${#list[@]}-1))
-                redraw
-                search=
-            else
-                search=1
-            fi
-        ;;
+        a) play_all_in_dir ;;
 
-        # Mark songs to play
-        "${KEY_MARK_PLAYLIST:=" "}")
-            # Don't mark dirs
-            if [ -d ${list[scroll]} ]; then
-                :
-            else
-                mark "$scroll" "$1"
-            fi
+        s) shuffle_all_in_dir ;;
 
-            # Scroll down one item
-            ((scroll < list_total)) && {
-                ((scroll++))
-                ((y < max_items )) && ((y++))
-
-                format_line "$((scroll-1))"
-                printf '\n'
-                format_line "$scroll"
-                status_line
-            }
-
-        ;;
-
-
-        "${KEY_PLAY_PLAYLIST:=""}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-
-            if ((${#marked_files[@]} != 0)); then
-                playlist_file="${HOME}/.cache/shellaro/playlist"
-                # Save marked files to a file and open them for editing
-                printf '%s\n' "${marked_files[@]}" > "$playlist_file"
-
-                kill_music
-                2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
-
-                marked_files=()
-                reload
-
-            elif [[ ${list[scroll]} == *.mp3 ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-                reload
-
-            elif [[ -d ${list[scroll]} ]]; then
-                open "${list[scroll]}"
-            fi
-            IS_PAUSED=false
-            STARTED=$(date +%s)
-            redraw
-
-        ;;
-
-        # Clear selection
-        "${KEY_CLEAR1:=c}"|\
-        "${KEY_CLEAR2:=x}")
-            marked_files=()
-            redraw
-        ;;
-
-        # Pause (suspend or resume mpg321)
-        "${KEY_PAUSE_PLAY:=p}")
-            local MPG321_PID=
-
-            MPG321_PID=$(pgrep mpg321)
-
-            # If mpg321 is not running, play
-            if [ -z "${MPG321_PID}" ]; then
-                ((search == 1 && search_end_early != 1)) && open "$PWD"
-
-                # If list item is a dir, play all in dir
-                if [[ -d ${list[scroll]} ]]; then
-                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
-                    IS_PAUSED=false
-                    STARTED=$(date +%s)
-
-                # If list item is a file, play it
-                elif [[ -f ${list[scroll]} ]]; then
-                    2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-                    IS_PAUSED=false
-                    STARTED=$(date +%s)
-                fi
-
-            # Elif process is running; suspend
-            elif [[ $(awk 'NR==3{print $2}' "/proc/${MPG321_PID}/status") == "S" ]]; then
-                kill -STOP "${MPG321_PID}"
-                IS_PAUSED=true
-
-            # Elif suspended; resume
-            elif [[ $(awk 'NR==3{print $2}' "/proc/${MPG321_PID}/status") == "T" ]]; then
-                kill -CONT "${MPG321_PID}"
-                IS_PAUSED=false
-                STARTED=$(date +%s)
-            fi
-
-            reload
-        ;;
-
-        # Next Song
-        "${KEY_NEXT:=n}")
-            local MIN_AGE=
-            local KEYPRESS=
-            local AGE=
-
-            MIN_AGE=2 # seconds
-            KEYPRESS=$(date +%s)
-            let "AGE=$KEYPRESS-$STARTED"
-
-            # Don't allow the user to skip to the next song within the first 2 seconds,
-            # otherwise mpg321 is killed
-            if [[ -n "$(pgrep mpg321)" ]]; then
-                if [[ "$AGE" -ge "$MIN_AGE" ]]; then
-
-                    if [[ $(awk 'NR==3{print $2}' "/proc/$(pgrep mpg321)/status") == "T" ]]; then
-                        kill -CONT "$(pgrep mpg321)"
-                        IS_PAUSED=false
-                    fi
-
-                    # A single SIGINT (ctrl-c) in mpg321 goes to the next song
-                    2>/dev/null 1>&2 killall -s SIGINT mpg321
-                    STARTED=$(date +%s)
-
-                    reload
-                else
-                    return
-                fi
-            else
-                redraw
-                return
-            fi
-        ;;
-
-        # Go to $MUSIC_DIRECTORY
-        "${KEY_GO_HOME1:=\`}"|\
-        "${KEY_GO_HOME2:=0}"|\
-        "${KEY_GO_HOME3:=~}")
-            open "$MUSIC_DIRECTORY"
-        ;;
-
-        # Play All In PWD
-        "${KEY_PLAY:=a}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-            if [[ -d ${list[scroll]} ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
-            elif [[ -f ${list[scroll]} ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 ./*.mp3 &
-            else
-                return
-            fi
-            IS_PAUSED=false
-            STARTED=$(date +%s)
-            reload
-        ;;
-
-        # Shuffle All In PWD
-        "${KEY_SHUFFLE:=s}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-            if [[ -d ${list[scroll]} ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
-            elif [[ -f ${list[scroll]} ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &
-            else
-                return
-            fi
-            IS_PAUSED=false
-            STARTED=$(date +%s)
-            reload
-        ;;
-
-        # Shuffle All In $MUSIC_DIRECTORY
-        "${KEY_SHUFFLE_ALL:=S}")
-            ((search == 1 && search_end_early != 1)) && open "$PWD"
-            kill_music
-            2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &
-            IS_PAUSED=false
-            STARTED=$(date +%s)
-            reload
-        ;;
+        S) shuffle_all ;;
 
         # Volume Up
-        "${KEY_VOL_UP1:=u}"|\
-        "${KEY_VOL_UP2:=+}")
-            2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute
-            redraw
-        ;;
+        u|+) 2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute; redraw ;;
 
         # Volume Down
-        "${KEY_VOL_DOWN1:=d}"|\
-        "${KEY_VOL_DOWN2:=-}")
-            2>/dev/null 1>&2 amixer -D pulse sset Master 5%-
-            redraw
-        ;;
+        d|-) 2>/dev/null 1>&2 amixer -D pulse sset Master 5%-; redraw ;;
 
-        # Set Volume
-        "${KEY_SET_VOLUME1:=v}"|\
-        "${KEY_SET_VOLUME2:==}")
-            cmd_line "Set Volume [0-100]: "
-            # if cmd_reply is between 0 & 100
-            if [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ]; then
-                2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%
-            fi
-            redraw
-        ;;
+        v|=) set_volume ;;
 
-        # Mute / Unmute
-        "${KEY_TOGGLE_MUTE:=m}")
-            2>/dev/null 1>&2 amixer -D pulse sset Master toggle
-            if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
-                IS_MUTED=true
-            else
-                IS_MUTED=false
-            fi
-            redraw
-        ;;
+        m) mute_or_unmute ;;
 
         # Jump To Favs
-        [1-9])
-            favorite="SHORTCUT_${1}"
-            favorite="${!favorite}"
-
-            [[ $favorite ]] &&
-                open "$favorite"
-        ;;
+        [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "$favorite" ;;
 
         # Kill mpg321
-        "${KEY_KILL:=K}")
-            kill_music
-            reload
-        ;;
+        K) kill_music; reload ;;
 
         # Redraw, useful when bugs appear!
-        "${KEY_RELOAD_DIR:=r}")
-            clear_screen
-            redraw full
-            reload
-        ;;
+        r) clear_screen; redraw full; reload ;;
 
         # Create a new instance of the program
         # and exit the current instance (for testing)
-        "${KEY_RESTART:=R}")
-            ~/GitHub/shellaro/shellaro "$0" && exit
-        ;;
+        R) ~/GitHub/shellaro/shellaro "$0" && exit ;;
 
-        # Quit
-        q|Q)
-            if [[ "$DEBUG" == true ]]; then
-                set +x
-                read_flags=(-t 0.05)
-                DEBUG=false
-                redraw full
-            else
-                clear
-                echo "" > "${HOME}/.cache/shellaro/playlist"
-                exit
-            fi
-        ;;
+        q|Q) exit_program ;;
     esac
 }
 
@@ -841,7 +841,7 @@ main() {
     cd "${2:-$1}" &>/dev/null ||:
 
     [[ $1 == --version ]] || [[ $1 == -v ]] && {
-        printf '%s\n' "shellaro 1.1"
+        printf '%s\n' "shellaro 1.2"
         exit
     }
 
@@ -856,7 +856,7 @@ main() {
     # a key (causing the read to finish). This sets a read timeout on the
     # affected versions of bash
     ((BASH_VERSINFO[0] > 3)) &&
-        read_flags=(-t 0.05)
+        read_flags=(-t 0.60)
 
     # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
     # 'nullglob':   Don't expand non-matching globs to themselves
@@ -879,7 +879,7 @@ main() {
     open "$MUSIC_DIRECTORY"
     redraw full
 
-    # Vintage infinite loop.
+    # Infinite loop
     for ((;;)); {
         read "${read_flags[@]}" -srn 1 && key "$REPLY"
 

@@ -10,6 +10,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - directory shortcuts
 - search with tab completion
 - volume controls
+- find & auto play / open (eg. Searching 'stopme' would match & auto-play DontStopMeNow.mp3. Searching 'oor' would match and play everything in 'TheDoors' directory)
 
 ## Dependencies
 
@@ -58,7 +59,9 @@ p -- pause / play
 n -- next song
 K -- stop (kill mpg321)
 
-q -- quit, :q also works
+; -- find and play song
+
+q -- quit
 
 a -- play all songs in directory
 s -- shuffle all songs in directory
@@ -71,6 +74,7 @@ S -- shuffle all songs in $MUSIC_DIRECTORY
 space -- mark file for playlist
 enter -- play playlist
 
+c -- clear marked selection
 x -- clear marked selection
 ```
 
@@ -94,6 +98,36 @@ m -- toggle mute / unmute
 **$MUSIC_DIRECTORY** is the base directory that Shellaro uses (this assumes you have all your music contained within a single directory)
 
 the **$SHORTCUT** variables are used to set the paths for directory shortcuts which use the 1-9 keys
+
+the **$COLOR** variables can be used to change the colors of shellaro
+
+the **$ICON** variables can be used to set pause, play, stop, mute, and mark icons
+
+### Color values
+
+```
+text colors:
+30 -- black
+31 -- red
+32 -- green
+33 -- yellow
+34 -- blue
+35 -- magenta
+36 -- cyan
+37 -- white
+
+background colors:
+30 -- black
+31 -- red
+32 -- green
+33 -- yellow
+34 -- blue
+35 -- magenta
+36 -- cyan
+37 -- white
+```
+
+the **$ICON\*BOLD** variables can be used to set whether or not a color will be bold, 1 for bold, 0 for normal
 
 ## Where did the name come from?
 
