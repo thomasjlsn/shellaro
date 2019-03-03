@@ -660,7 +660,6 @@ shuffle_all () {
 exit_program () {
     if [[ "$DEBUG" == true ]]; then
         set +x
-        read_flags=(-t 0.05)
         DEBUG=false
         redraw full
     else
@@ -701,7 +700,6 @@ execute_command () {
 
     if [[ "$cmd_reply" == "debug" ]]; then
         set -x
-        read_flags=(-t 0.50)
         DEBUG=true
         redraw full
     fi
