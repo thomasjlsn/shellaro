@@ -79,9 +79,9 @@ get_term_size() {
 
 set_initial_status() {
     if [ -n "$(pgrep mpg321)" ]; then
-        if [[ $(ps -o s= -p "$(pgrep mpg321)") == "S" ]]; then
+        if [[ $(awk 'NR==3{print $2}' "/proc/$(pgrep mpg321)/status") == "S" ]]; then
             IS_PAUSED=false
-        elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+        elif [[ $(awk 'NR==3{print $2}' "/proc/$(pgrep mpg321)/status") == "T" ]]; then
             IS_PAUSED=true
         fi
 
@@ -413,7 +413,7 @@ kill_music () {
         return
 
     # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
-    elif [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+    elif [[ $(awk 'NR==3{print $2}' "/proc/$(pgrep mpg321)/status") == "T" ]]; then
         kill -CONT "$(pgrep mpg321)"
         2>/dev/null 1>&2 killall -s SIGINT mpg321
         2>/dev/null 1>&2 killall -s SIGINT mpg321
@@ -448,6 +448,7 @@ key() {
 
             if [[ "$cmd_reply" == "debug" ]]; then
                 set -x
+                read_flags=(-t 0.50)
                 DEBUG=true
                 redraw full
             fi
@@ -656,12 +657,12 @@ key() {
                 fi
 
             # Elif process is running; suspend
-            elif [[ $(ps -o s= -p "${MPG321_PID}") == "S" ]]; then
+            elif [[ $(awk 'NR==3{print $2}' "/proc/${MPG321_PID}/status") == "S" ]]; then
                 kill -STOP "${MPG321_PID}"
                 IS_PAUSED=true
 
             # Elif suspended; resume
-            elif [[ $(ps -o s= -p "${MPG321_PID}") == "T" ]]; then
+            elif [[ $(awk 'NR==3{print $2}' "/proc/${MPG321_PID}/status") == "T" ]]; then
                 kill -CONT "${MPG321_PID}"
                 IS_PAUSED=false
                 STARTED=$(date +%s)
@@ -685,7 +686,7 @@ key() {
             if [[ -n "$(pgrep mpg321)" ]]; then
                 if [[ "$AGE" -ge "$MIN_AGE" ]]; then
 
-                    if [[ $(ps -o s= -p "$(pgrep mpg321)") == "T" ]]; then
+                    if [[ $(awk 'NR==3{print $2}' "/proc/$(pgrep mpg321)/status") == "T" ]]; then
                         kill -CONT "$(pgrep mpg321)"
                         IS_PAUSED=false
                     fi
@@ -823,6 +824,7 @@ key() {
         q|Q)
             if [[ "$DEBUG" == true ]]; then
                 set +x
+                read_flags=(-t 0.05)
                 DEBUG=false
                 redraw full
             else
