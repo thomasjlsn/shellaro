@@ -30,6 +30,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - awk
 - bash
 - grep
+- locate
 - pgrep
 - readlink
 - sed
