@@ -85,7 +85,7 @@ set_initial_status() {
             IS_PAUSED=true
         fi
 
-        if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+        if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
             IS_MUTED=true
         else
             IS_MUTED=false
@@ -115,7 +115,7 @@ status_line() {
         VOL="${ICON_MUTED}"
         COLOR="${COLOR_MUTED}"
     else
-        VOL="$(amixer -D pulse get Master | grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
+        VOL="$(amixer -D pulse get Master | \grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
     fi
 
     if [ -n "$(pgrep mpg321)" ]; then
@@ -783,7 +783,7 @@ key() {
         # Mute / Unmute
         "${KEY_TOGGLE_MUTE:=m}")
             2>/dev/null 1>&2 amixer -D pulse sset Master toggle
-            if [ -n "$(amixer -D pulse get Master | grep '\[off\]')" ]; then
+            if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
                 IS_MUTED=true
             else
                 IS_MUTED=false
