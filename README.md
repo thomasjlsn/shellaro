@@ -10,7 +10,7 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - directory shortcuts
 - search with tab completion
 - volume controls
-- find & auto play / open (eg. Searching 'stopme' would match & auto-play DontStopMeNow.mp3. Searching 'oor' would match and play everything in 'TheDoors' directory)
+- find & auto play (eg. Searching 'stopme' would match & auto-play DontStopMeNow.mp3. Searching 'oor' would match and play everything in 'TheDoors' directory)
 
 ## Dependencies
 
@@ -117,14 +117,14 @@ text colors:
 37 -- white
 
 background colors:
-30 -- black
-31 -- red
-32 -- green
-33 -- yellow
-34 -- blue
-35 -- magenta
-36 -- cyan
-37 -- white
+40 -- black
+41 -- red
+42 -- green
+43 -- yellow
+44 -- blue
+45 -- magenta
+46 -- cyan
+47 -- white
 ```
 
 the **$ICON\*BOLD** variables can be used to set whether or not a color will be bold, 1 for bold, 0 for normal
