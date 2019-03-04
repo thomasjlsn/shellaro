@@ -85,7 +85,7 @@ set_initial_status() {
             IS_PAUSED=true
         fi
 
-        if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
+        if [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ]; then
             IS_MUTED=true
         else
             IS_MUTED=false
@@ -115,7 +115,7 @@ status_line() {
         volume="${ICON_MUTED}"
         color="${COLOR_MUTED}"
     else
-        volume="$(amixer -D pulse get Master | \grep -m1 "  Front" | awk -F '[\[\]]' '{print $2" "}')"
+        volume="$(amixer -D pulse get Master | awk '/Left:/' | awk -F '[\[\]]' '{print $2" "}')"
     fi
 
     if [ -n "$(pgrep mpg321)" ]; then
@@ -670,7 +670,7 @@ exit_program () {
 
 mute_or_unmute () {
     2>/dev/null 1>&2 amixer -D pulse sset Master toggle
-    if [ -n "$(amixer -D pulse get Master | \grep '\[off\]')" ]; then
+    if [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ]; then
         IS_MUTED=true
     else
         IS_MUTED=false
@@ -704,7 +704,7 @@ execute_command () {
     fi
 
     if [[ "$cmd_reply" == "debug-exec" ]]; then
-        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit 
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
         DEBUG=true
         redraw full
     fi
@@ -854,7 +854,7 @@ main() {
     }
 
     [[ $1 == --debug-exec ]] || [[ "$1" == "-D" ]] && {
-        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit 
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
         DEBUG=true
     }
 

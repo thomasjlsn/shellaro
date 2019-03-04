@@ -28,8 +28,8 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 - [mpg321](http://mpg321.sourceforge.net/)
 - amixer
 - awk
-- bash
-- grep
+- kill
+- killall
 - locate
 - pgrep
 - readlink
