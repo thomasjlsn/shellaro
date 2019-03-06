@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-#
-# shellaro -- a terminal music player
-# https://github.com/thomasjlsn/shellaro
-#
-# inspired by fff
-# https://github.com/dylanaraps/fff
+
+###########################################################
+#                                                         #
+#           shellaro - a terminal music player            #
+#         https://github.com/thomasjlsn/shellaro          #
+#                                                         #
+#                    inspired by fff                      #
+#           https://github.com/dylanaraps/fff             #
+#                                                         #
+###########################################################
+
+VERSION="1.4.0"
 
 # CONFIG
 # TODO external config file
@@ -57,21 +63,55 @@ export ICON_MUTED="MUTE"
 
 XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
+export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
+error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
+
 setup_terminal() {
-    printf '\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
+    # '\e[?1049h': Use alternative screen buffer.
+    # '\e[?7l':    Disable line wrapping.
+    # '\e[?25l':   Hide the cursor.
+    # '\e[2J':     Clear the screen.
+    # '\e[1;Nr':   Limit scrolling to scrolling area.
+    #              Also sets cursor to (0,0).
+    printf '\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
 
     # Hide input
     stty -echo
 }
 
-reset_terminal() {
-    printf '\e[?7h\e[?25h\e[2J\e[;r'
+cleanup() {
+    # '\e[?7h':   Re-enable line wrapping.
+    # '\e[?25h':  Unhide the cursor.
+    # '\e[2J':    Clear the terminal.
+    # '\e[;r':    Set the scroll region to its default value.
+    #             Also sets cursor to (0,0).
+    # '\e[?1049l: Restore main screen buffer.
+    printf '\e[?7h\e[?25h\e[2J\e[;r\e[?1049l'
+
+    [[ "${DEBUG}" == true ]] && {
+        set +x
+        DEBUG=false
+    }
+    set +o nolog
+    set +o pipefail
+
+    echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
+
+    set +h
 
     # Show input
     stty echo
+#    clear
+    exit 0
 }
 
 clear_screen() {
+    # '\e[%sH':    Move cursor to bottom of scroll area.
+    # '\e[9999C':  Move cursor to right edge of the terminal.
+    # '\e[1J':     Clear screen to top left corner (from cursor up).
+    # '\e[2J':     Clear screen fully (if using tmux) (fixes clear issues).
+    # '\e[1;%sr':  Clearing the screen resets the scroll region(?). Re-set it.
+    #              Also sets cursor to (0,0).
     printf '\e[%sH\e[9999C\e[1J%b\e[1;%sr' \
            "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
 }
@@ -114,6 +154,12 @@ status_line() {
     mpg321_pid=$(pgrep mpg321)
     NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
 
+    [[ "${NOW_PLAYING}" == *pipe:[* ]] && {
+        kill_music
+        NOW_PLAYING=""
+        error "readlink has failed"
+    }
+
     if [[ "${IS_PAUSED}" == true ]]; then
         icon="${ICON_PAUSED}"
         color="${COLOR_PAUSED}"
@@ -140,6 +186,18 @@ status_line() {
     mark_ui="[${#marked_files[@]}]"
     format_status_line="${icon} ${volume}${marked_files[*]:+${mark_ui}} ${NOW_PLAYING}"
 
+    # '\e7':       Save cursor position.
+    #              This is more widely supported than '\e[s'.
+    # '\e[%sH':    Move cursor to bottom of the terminal.
+    # '\e[30;41m': Set foreground and background colors.
+    # '%*s':       Insert enough spaces to fill the screen width.
+    #              This sets the background color to the whole line
+    #              and fixes issues in 'screen' where '\e[K' doesn't work.
+    # '\r':        Move cursor back to column 0 (was at EOL due to above).
+    # '\e[m':      Reset text formatting.
+    # '\e[H\e[K':  Clear line below status_line.
+    # '\e8':       Restore cursor position.
+    #              This is more widely supported than '\e[u'.
     printf '\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
            "${color}" \
@@ -266,7 +324,7 @@ draw_dir() {
 
 redraw() {
     [[ $1 == full ]] && {
-        read_dir
+        read_dir || error "read_dir has failed"
         scroll=0
     }
 
@@ -416,6 +474,9 @@ cmd_line() {
     # Unset tab completion
     unset comp c
 
+    # '\e[2K':   Clear the entire cmd_line on finish.
+    # '\e[?25l': Hide the cursor.
+    # '\e8':     Restore cursor position.
     printf '\e[2K\e[?25l\e8'
 }
 
@@ -471,7 +532,7 @@ next_song () {
                 IS_PAUSED=false
             fi
 
-            # A single SIGINT (ctrl-c) in mpg321 goes to the next song
+            # A single SIGINT (ctrl-c) to mpg321 goes to the next song
             (2>/dev/null 1>&2 killall -s SIGINT mpg321)
             STARTED=$(date +%s)
 
@@ -593,15 +654,41 @@ play_marked_songs () {
     fi
 }
 
+# TODO better playlists, this is just a quick solution to get it working
+add_marked_to_playlist () {
+    if ((${#marked_files[@]} != 0)); then
+        cmd_line "add to: "
+        custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
+        # Save marked files to a file and open them for editing
+        printf '%s\n' "${marked_files[@]}" >> "${custom_playlist}"
+
+        marked_files=()
+        reload; return
+    fi
+}
+
+delete_playlist () {
+    cmd_line "delete playlist: "
+    custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
+    # Save marked files to a file and open them for editing
+    echo "" > "${custom_playlist}"
+
+    reload; return
+}
+
 find_current_song () {
+    local mpg321_pid=
+
+    mpg321_pid=$(pgrep mpg321)
+
     # If mpg231 is not running, don't search
-    [ -z "$(pgrep mpg321)" ] &&
+    [ -z "${mpg321_pid}" ] &&
         return
 
-    open "$(locate "$(readlink -f /proc/"$(pgrep mpg321)"/fd/3  \
+    open "$(locate "$(readlink -f /proc/"${mpg321_pid}"/fd/3  \
         | awk -F "/" '{print $NF}')" \
         | awk -F "/" '{$NF=""; print $0}' \
-        | sed s/' '/'\/'/g)"
+        | sed s/' '/'\/'/g)" || exit 1
 }
 
 find_and_play () {
@@ -614,11 +701,27 @@ find_and_play () {
             if [[ -d ${search_result} ]];then
                 kill_music
                 (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
+
+                IS_PAUSED=false
+                STARTED=$(date +%s)
                 reload; return
 
             elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
                 kill_music
                 (2>/dev/null 1>&2 mpg321 "${search_result}" &)
+
+                IS_PAUSED=false
+                STARTED=$(date +%s)
+                reload; return
+
+            elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
+                playlist_file="${search_result}"
+
+                kill_music
+                (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
+
+                IS_PAUSED=false
+                STARTED=$(date +%s)
                 reload; return
 
             else
@@ -628,11 +731,27 @@ find_and_play () {
                     if [[ -d ${search_result} ]]; then
                         kill_music
                         (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
+
+                        IS_PAUSED=false
+                        STARTED=$(date +%s)
                         reload; return
 
                     elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
                         kill_music
                         (2>/dev/null 1>&2 mpg321 "${search_result}" &)
+
+                        IS_PAUSED=false
+                        STARTED=$(date +%s)
+                        reload; return
+
+                    elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
+                        playlist_file="${search_result}"
+
+                        kill_music
+                        (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
+
+                        IS_PAUSED=false
+                        STARTED=$(date +%s)
                         reload; return
                     fi
                 fi
@@ -665,19 +784,6 @@ shuffle_all () {
     reload
 }
 
-exit_program () {
-    [[ "${DEBUG}" == true ]] && {
-        set +x
-        DEBUG=false
-    }
-
-    echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
-
-    clear_screen
-    clear
-    exit 0
-}
-
 mute_or_unmute () {
     (2>/dev/null 1>&2 amixer -D pulse sset Master toggle)
     [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] &&
@@ -700,8 +806,22 @@ execute_command () {
 
     # Quit
     if [[ "${cmd_reply}" == "q" ]]; then
-        clear
         exit
+    fi
+
+    if [[ "${cmd_reply}" == "add" ]]; then
+        add_marked_to_playlist
+    fi
+
+    if [[ "${cmd_reply}" == "del" ]]; then
+        delete_playlist
+    fi
+
+    if [[ "${cmd_reply}" == "udb" ]]; then
+        cleanup
+        (sudo updatedb)
+        setup_terminal
+        redraw full
     fi
 
     if [[ "${cmd_reply}" == "debug" ]]; then
@@ -711,7 +831,7 @@ execute_command () {
     fi
 
     if [[ "${cmd_reply}" == "debug-x" ]]; then
-        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "${0}" && exit
         DEBUG=true
         redraw full
     fi
@@ -777,6 +897,15 @@ scroll_up () {
     }
 }
 
+toggle_hidden_files () {
+    # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'.
+    #                This also works for '3' or more values with
+    #                some modification.
+    shopt_flags=(u s)
+    shopt -"${shopt_flags[((a=a>0?0:++a))]}" dotglob
+    redraw full
+}
+
 key() {
     case "${1}" in
 
@@ -799,6 +928,8 @@ key() {
         /) search_in_dir ;;
 
         \;) find_and_play ;;
+
+        .) toggle_hidden_files ;;
 
         f) find_current_song ;;
 
@@ -845,16 +976,15 @@ key() {
         # and exit the current instance (for testing)
         R) ~/GitHub/shellaro/shellaro "${0}" && exit ;;
 
-        q|Q) exit_program ;;
+        q|Q) exit ;;
     esac
 }
 
 get_args() {
-    # [[ $1 == -d ]] || [[ $1 == --debug ]] && {
     while [[ "${1}" ]]; do
         case "${1}" in
             "-v"|"--version")
-                printf '%s\n' "shellaro 1.3"
+                printf '%s\n' "shellaro ${VERSION}"
                 exit
             ;;
 
@@ -877,8 +1007,18 @@ get_args() {
 }
 
 main() {
+    # Don't record function calls in command history
+    set -o nolog
+
+    set -o pipefail
+
+    # Locate & remember commands invoked by functions as functions are defined.
+    set -h
+
     get_args "${@}"
-    set_initial_status
+    set_initial_status || error "initial status check failed"
+
+    set -e
 
     # Do nothing if cd fails
     cd "${2:-$1}" &>/dev/null ||:
@@ -896,10 +1036,14 @@ main() {
     shopt -s nocaseglob nullglob
 
     # Trap the exit signal (we need to reset the terminal to a useable state.)
-    trap 'reset_terminal' EXIT
+    trap 'cleanup' EXIT
 
     # Trap the window resize signal (handle window resize events)
     trap 'get_term_size; redraw' WINCH
+
+    [[ ! -d "${MUSIC_DIRECTORY}/.playlists" ]] && {
+        mkdir -p "${MUSIC_DIRECTORY}/.playlists"
+    }
 
     [[ ! -d "${XDG_CACHE_HOME}/shellaro" ]] && {
         mkdir -p "${XDG_CACHE_HOME}/shellaro"
@@ -909,10 +1053,18 @@ main() {
         touch "${XDG_CACHE_HOME}/shellaro/playlist"
     }
 
+    [[ ! -f "${XDG_CACHE_HOME}/shellaro/error_log" ]] && {
+        touch "${XDG_CACHE_HOME}/shellaro/error_log"
+    }
+
     get_term_size
     setup_terminal
-    open "${MUSIC_DIRECTORY}"
+
+    set +e
+
+    open "${MUSIC_DIRECTORY}" || error "could not open MUSIC_DIRECTORY"
     redraw full
+
 
     # Infinite loop
     for ((;;)); {
