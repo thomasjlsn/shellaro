@@ -51,7 +51,7 @@ G -- go to bottom
 enter -- go to child dir
 backspace -- go to parent dir
 
-` -- go home ($MUSIC_DIRECTORY)
+` -- go to playlists
 ~ -- go home ($MUSIC_DIRECTORY)
 
 [1-9] -- favorites

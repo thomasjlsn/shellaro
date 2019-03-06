@@ -61,7 +61,7 @@ export ICON_PAUSED="◫"
 export ICON_STOPPED="□"
 export ICON_MUTED="MUTE"
 
-XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
 error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
@@ -649,6 +649,13 @@ play_marked_songs () {
         STARTED=$(date +%s)
         reload; return
 
+    elif [[ ${list[scroll]} == *.list ]]; then
+        kill_music
+        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
+        IS_PAUSED=false
+        STARTED=$(date +%s)
+        reload; return
+
     elif [[ -d ${list[scroll]} ]]; then
         open "${list[scroll]}"
     fi
@@ -817,6 +824,10 @@ execute_command () {
         delete_playlist
     fi
 
+    if [[ "${cmd_reply}" == "list" ]]; then
+        open "${MUSIC_DIRECTORY}"/.playlists
+    fi
+
     if [[ "${cmd_reply}" == "debug" ]]; then
         set -x
         DEBUG=true
@@ -834,6 +845,15 @@ go_to_child () {
     if [[ ${list[scroll]} == *.mp3 ]]; then
         kill_music
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
+
+        IS_PAUSED=false
+        STARTED=$(date +%s)
+
+        reload
+
+    elif [[ ${list[scroll]} == *.list ]]; then
+        kill_music
+        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
 
         IS_PAUSED=false
         STARTED=$(date +%s)
@@ -938,7 +958,9 @@ key() {
 
         n) next_song ;;
 
-        \`|~|0) open "${MUSIC_DIRECTORY}" ;;
+        \`) open "${MUSIC_DIRECTORY}"/.playlists ;;
+
+        ~|0) open "${MUSIC_DIRECTORY}" ;;
 
         a) play_all_in_dir ;;
 
