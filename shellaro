@@ -107,7 +107,7 @@ cleanup() {
     # Show input
     stty echo
 
-    kill -SIGTERM "${DAEMON_PID}"
+    kill -SIGTERM "$(awk 'NR==1{print}' "${XDG_CACHE_HOME}"/shellaro/daemon_pid)"
 
 #    clear
     exit 0
@@ -1009,7 +1009,10 @@ key() {
 
         # Create a new instance of the program
         # and exit the current instance (for testing)
-        R) ~/GitHub/shellaro/shellaro "${0}" && exit ;;
+        R)
+            kill -SIGTERM "$(awk 'NR==1{print}' "${XDG_CACHE_HOME}"/shellaro/daemon_pid)"
+            ~/GitHub/shellaro/shellaro "${0}" && exit
+        ;;
 
         q|Q) exit ;;
     esac
@@ -1116,13 +1119,20 @@ main() {
         touch "${XDG_CACHE_HOME}/shellaro/error_log"
     }
 
+    [[ ! -f "${XDG_CACHE_HOME}/shellaro/daemon_pid" ]] && {
+        touch "${XDG_CACHE_HOME}/shellaro/daemon_pid"
+    }
+
     get_term_size
     setup_tui
 
     set +e
 
-    open "${MUSIC_DIRECTORY}" || error "could not open MUSIC_DIRECTORY"
+    open "${MUSIC_DIRECTORY}" || fatal "could not open MUSIC_DIRECTORY"
     redraw full
+
+    # Run and cache PID for cleanup
+    (shellaro_daemon & echo $! > "${XDG_CACHE_HOME}"/shellaro/daemon_pid)
 
     # Infinite loop
     for ((;;)); {
@@ -1135,7 +1145,5 @@ main() {
         [[ -t 1 ]] || exit 1
     }
 }
-
-shellaro_daemon & export DAEMON_PID="$(echo $!)"
 
 main "${@}"
