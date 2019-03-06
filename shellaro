@@ -61,12 +61,16 @@ export ICON_PAUSED="◫"
 export ICON_STOPPED="□"
 export ICON_MUTED="MUTE"
 
+# Percent to raise or lower volume
+export INCREMENT_VOLUME=5
+
+# Cache directory
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
 error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
 
-setup_terminal() {
+setup_tui() {
     # '\e[?1049h': Use alternative screen buffer.
     # '\e[?7l':    Disable line wrapping.
     # '\e[?25l':   Hide the cursor.
@@ -141,7 +145,7 @@ set_initial_status() {
         } || IS_MUTED=false
     }
 
-    STARTED=$(date +%s)
+    STARTED=$(date +%s%3N)
 }
 
 status_line() {
@@ -517,14 +521,14 @@ next_song () {
     local mpg321_pid=
 
     mpg321_pid=$(pgrep mpg321)
-    min_age=2 # seconds
-    keypress=$(date +%s)
+    min_age=1050 # milliseconds
+    keypress=$(date +%s%3N)
 
     age="((${keypress}-${STARTED}))"
 
-    # Don't allow the user to skip to the next song within the first 2 seconds,
+    # Don't allow the user to skip to the next song within the first second,
     # otherwise mpg321 is killed
-    if [[ -n "${mpg321_pid}" ]]; then
+    [[ -n "${mpg321_pid}" ]] && {
         if [[ "${age}" -ge "${min_age}" ]]; then
 
             if [[ $(awk 'NR==3{print $2}' "/proc/${mpg321_pid}/status") == "T" ]]; then
@@ -534,15 +538,13 @@ next_song () {
 
             # A single SIGINT (ctrl-c) to mpg321 goes to the next song
             (2>/dev/null 1>&2 killall -s SIGINT mpg321)
-            STARTED=$(date +%s)
+            STARTED=$(date +%s%3N)
 
             reload
         else
             return
         fi
-    else
-        return
-    fi
+    }||:
 }
 
 pause_or_play () {
@@ -557,13 +559,13 @@ pause_or_play () {
         if [[ -d ${list[scroll]} ]]; then
             (2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &)
             IS_PAUSED=false
-            STARTED=$(date +%s)
+            STARTED=$(date +%s%3N)
             reload; return
 
         else
             (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
             IS_PAUSED=false
-            STARTED=$(date +%s)
+            STARTED=$(date +%s%3N)
             reload; return
         fi
     fi
@@ -580,7 +582,7 @@ pause_or_play () {
     elif [[ ${mpg321_status} == "T" ]]; then
         (kill -CONT "${mpg321_pid}")
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
         reload; return
     fi
 }
@@ -593,7 +595,7 @@ play_all_in_dir () {
     }|| (2>/dev/null 1>&2 mpg321 ./*.mp3 &)
 
     IS_PAUSED=false
-    STARTED=$(date +%s)
+    STARTED=$(date +%s%3N)
 
     reload
 }
@@ -606,7 +608,7 @@ shuffle_all_in_dir () {
     }|| (2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &)
 
     IS_PAUSED=false
-    STARTED=$(date +%s)
+    STARTED=$(date +%s%3N)
 
     reload
 }
@@ -639,21 +641,21 @@ play_marked_songs () {
 
         marked_files=()
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
         reload; return
 
     elif [[ ${list[scroll]} == *.mp3 ]]; then
         kill_music
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
         reload; return
 
     elif [[ ${list[scroll]} == *.list ]]; then
         kill_music
         (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
         reload; return
 
     elif [[ -d ${list[scroll]} ]]; then
@@ -663,6 +665,8 @@ play_marked_songs () {
 
 # TODO better playlists, this is just a quick solution to get it working
 add_marked_to_playlist () {
+    local custom_playlist=
+
     if ((${#marked_files[@]} != 0)); then
         cmd_line "add to: "
         custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
@@ -670,17 +674,25 @@ add_marked_to_playlist () {
         printf '%s\n' "${marked_files[@]}" >> "${custom_playlist}"
 
         marked_files=()
-        reload; return
+        redraw
     fi
 }
 
 delete_playlist () {
-    cmd_line "delete playlist: "
-    custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
-    # Save marked files to a file and open them for editing
-    echo "" > "${custom_playlist}"
+    local custom_playlist=
 
-    reload; return
+    cmd_line "delete playlist: "
+
+    custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
+
+    if [[ -f "${custom_playlist}" ]] && [[ "${PWD}" == "${MUSIC_DIRECTORY}"/.playlists ]]; then
+        rm "${custom_playlist}"
+        redraw full; return
+    elif [[ -f "${custom_playlist}" ]]; then
+        rm "${custom_playlist}"
+    fi
+
+    redraw
 }
 
 find_current_song () {
@@ -689,16 +701,20 @@ find_current_song () {
     mpg321_pid=$(pgrep mpg321)
 
     # If mpg231 is not running, don't search
-    [ -z "${mpg321_pid}" ] &&
+    [[ -z "${mpg321_pid}" ]] &&
         return
 
     open "$(locate "$(readlink -f /proc/"${mpg321_pid}"/fd/3  \
         | awk -F "/" '{print $NF}')" \
         | awk -F "/" '{$NF=""; print $0}' \
         | sed s/' '/'\/'/g)" || exit 1
+
+    reload
 }
 
 find_and_play () {
+    local search_result=
+
     cmd_line "locate: "
 
     if [[ -n "${cmd_reply}" ]]; then
@@ -710,7 +726,7 @@ find_and_play () {
                 (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
 
                 IS_PAUSED=false
-                STARTED=$(date +%s)
+                STARTED=$(date +%s%3N)
                 reload; return
 
             elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
@@ -718,7 +734,7 @@ find_and_play () {
                 (2>/dev/null 1>&2 mpg321 "${search_result}" &)
 
                 IS_PAUSED=false
-                STARTED=$(date +%s)
+                STARTED=$(date +%s%3N)
                 reload; return
 
             elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
@@ -728,7 +744,7 @@ find_and_play () {
                 (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
 
                 IS_PAUSED=false
-                STARTED=$(date +%s)
+                STARTED=$(date +%s%3N)
                 reload; return
 
             else
@@ -740,7 +756,7 @@ find_and_play () {
                         (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
 
                         IS_PAUSED=false
-                        STARTED=$(date +%s)
+                        STARTED=$(date +%s%3N)
                         reload; return
 
                     elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
@@ -748,7 +764,7 @@ find_and_play () {
                         (2>/dev/null 1>&2 mpg321 "${search_result}" &)
 
                         IS_PAUSED=false
-                        STARTED=$(date +%s)
+                        STARTED=$(date +%s%3N)
                         reload; return
 
                     elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
@@ -758,7 +774,7 @@ find_and_play () {
                         (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
 
                         IS_PAUSED=false
-                        STARTED=$(date +%s)
+                        STARTED=$(date +%s%3N)
                         reload; return
                     fi
                 fi
@@ -786,7 +802,7 @@ shuffle_all () {
     (2>/dev/null 1>&2 mpg321 "${MUSIC_DIRECTORY}" -B --shuffle &)
 
     IS_PAUSED=false
-    STARTED=$(date +%s)
+    STARTED=$(date +%s%3N)
 
     reload
 }
@@ -847,7 +863,7 @@ go_to_child () {
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
 
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
 
         reload
 
@@ -856,7 +872,7 @@ go_to_child () {
         (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
 
         IS_PAUSED=false
-        STARTED=$(date +%s)
+        STARTED=$(date +%s%3N)
 
         reload
 
@@ -969,10 +985,10 @@ key() {
         S) shuffle_all ;;
 
         # Volume Up
-        u|+) (2>/dev/null 1>&2 amixer -D pulse sset Master 5%+ unmute); redraw ;;
+        u|+) (2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}"%+ unmute); redraw ;;
 
         # Volume Down
-        d|-) (2>/dev/null 1>&2 amixer -D pulse sset Master 5%-); redraw ;;
+        d|-) (2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}"%-); redraw ;;
 
         v|=) set_volume ;;
 
@@ -1073,7 +1089,7 @@ main() {
     }
 
     get_term_size
-    setup_terminal
+    setup_tui
 
     set +e
 
