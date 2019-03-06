@@ -10,7 +10,7 @@
 #                                                         #
 ###########################################################
 
-VERSION="1.4.0"
+VERSION="1.5.0"
 
 # CONFIG
 # TODO external config file
@@ -68,7 +68,8 @@ export INCREMENT_VOLUME=5
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
-error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
+error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; }
+fatal() { echo "[FATAL]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
 
 setup_tui() {
     # '\e[?1049h': Use alternative screen buffer.
@@ -105,6 +106,9 @@ cleanup() {
 
     # Show input
     stty echo
+
+    kill -SIGTERM "${DAEMON_PID}"
+
 #    clear
     exit 0
 }
@@ -156,12 +160,12 @@ status_line() {
     local mpg321_pid=
 
     mpg321_pid=$(pgrep mpg321)
-    NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
+    export NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
 
     [[ "${NOW_PLAYING}" == *pipe:[* ]] && {
         kill_music
         NOW_PLAYING=""
-        error "readlink has failed"
+        fatal "readlink has failed"
     }
 
     if [[ "${IS_PAUSED}" == true ]]; then
@@ -176,7 +180,7 @@ status_line() {
         volume="${ICON_MUTED}"
         color="${COLOR_MUTED}"
     else
-        volume="$(amixer -D pulse get Master | awk '/Left:/' | awk -F '[\[\]]' '{print $2" "}')"
+        volume="$(amixer -D pulse get Master | awk '/Left:/' | awk -F '[\[\]]' '{print $2" "}' || "$(error "volume pipe has failed")")"
     fi
 
     if [ -n "${mpg321_pid}" ]; then
@@ -1037,6 +1041,27 @@ get_args() {
     done
 }
 
+shellaro_daemon() {
+    # Infinite loop
+    for ((;;)); {
+        local mpg321_pid=
+
+        mpg321_pid=$(pgrep mpg321)
+
+        export STATUS_DAEMON=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
+
+        [[ "${STATUS_DAEMON}" == *pipe:[* ]] && {
+            kill_music
+            export STATUS_DAEMON=""
+            fatal "readlink has failed"
+        }
+
+        [[ -t 1 ]] || exit 1
+
+        sleep 0.2
+    }
+}
+
 main() {
     # Don't record function calls in command history
     set -o nolog
@@ -1069,6 +1094,9 @@ main() {
     # Trap the exit signal (we need to reset the terminal to a useable state.)
     trap 'cleanup' EXIT
 
+    # Trap terminate signal for a clean kill.
+    trap 'cleanup' SIGTERM
+
     # Trap the window resize signal (handle window resize events)
     trap 'get_term_size; redraw' WINCH
 
@@ -1096,14 +1124,18 @@ main() {
     open "${MUSIC_DIRECTORY}" || error "could not open MUSIC_DIRECTORY"
     redraw full
 
-
     # Infinite loop
     for ((;;)); {
         read "${read_flags[@]}" -srn 1 && key "${REPLY}"
+
+        # reload the screen if music changes
+        [[ "${NOW_PLAYING}" != "${STATUS_DAEMON}" ]] && redraw
 
         # Exit if there is no longer a terminal attached
         [[ -t 1 ]] || exit 1
     }
 }
+
+shellaro_daemon & export DAEMON_PID="$(echo $!)"
 
 main "${@}"
