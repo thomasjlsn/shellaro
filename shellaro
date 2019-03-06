@@ -817,13 +817,6 @@ execute_command () {
         delete_playlist
     fi
 
-    if [[ "${cmd_reply}" == "udb" ]]; then
-        cleanup
-        (sudo updatedb)
-        setup_terminal
-        redraw full
-    fi
-
     if [[ "${cmd_reply}" == "debug" ]]; then
         set -x
         DEBUG=true

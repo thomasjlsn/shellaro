@@ -16,10 +16,10 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 
 * [Dependencies](#dependencies)
 * [Usage](#usage)
-    * [Navigation](#navigation)
     * [Play](#play)
     * [Playlists](#playlists)
     * [Volume](#volume)
+    * [Other](#other)
 * [Configuration](#configuration)
 * [F.A.Q.](#faq)
 
@@ -37,9 +37,9 @@ A terminal music player written in bash, based on [fff](https://github.com/dylan
 
 ## Usage
 
-### Navigation
-
 ```
+q -- quit
+
 k -- go up
 j -- go down
 l -- go to child dir
@@ -55,6 +55,8 @@ backspace -- go to parent dir
 ~ -- go home ($MUSIC_DIRECTORY)
 
 [1-9] -- favorites
+
+. -- toggle hidden files
 
 / -- search
 
@@ -77,8 +79,6 @@ K -- stop (kill mpg321)
 
 ; -- find and play song
 
-q -- quit
-
 a -- play all songs in directory
 s -- shuffle all songs in directory
 S -- shuffle all songs in $MUSIC_DIRECTORY
@@ -86,12 +86,21 @@ S -- shuffle all songs in $MUSIC_DIRECTORY
 
 ### Playlists
 
+*playlists are saved to $MUSIC_DIRECTORY/.playlists*
+
+*playlists are saved as 'somename.list'*
+
 ```
 space -- mark file for playlist
-enter -- play playlist
+enter -- play marked files
 
 c -- clear marked selection
 x -- clear marked selection
+
+COMMANDS
+
+:add -- add marked files to playlist
+:del -- delete a playlist
 ```
 
 ### Volume
@@ -107,6 +116,28 @@ v -- set volume [0 - 100]
 = -- set volume [0 - 100]
 
 m -- toggle mute / unmute
+```
+
+### Commands
+
+```
+: -- command line
+
+:q -- quit
+:add -- add marked files to playlist
+:del -- delete a playlist
+```
+
+### Other
+
+```
+r -- redraw screen
+R -- restart program (This is intended for testing purposes only and will not work without updating the path in 'key()')
+
+COMMANDS
+
+:debug -- trace
+:debug-x -- trace executables
 ```
 
 ## Configuration
@@ -153,10 +184,10 @@ Shellaro is a combinaton of "shell" (in reference to bash) & "[Collaro](https://
 
 ### Help, locate doesn't work!
 
-if `;` (locate) is not working, the most likely cause is a non existant path in locate's databse (eg. a song was moved/deleted). Try updating mlocate.db with:
+if `;` (locate) is not working, the most likely cause is a non existant path in locate's databse (eg. a song was moved/deleted). Try updating mlocate.db by running the following in your terminal:
 
 ```
-sudo updatedb
+$sudo updatedb
 ```
 
 locate should now be working fine!
