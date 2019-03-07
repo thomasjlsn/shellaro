@@ -125,7 +125,8 @@ clear_screen() {
 }
 
 get_term_size() {
-    read -r LINES COLUMNS < <(stty size)
+    #read -r LINES COLUMNS < <(stty size)
+    shopt -s checkwinsize; (:;:)
 
     # Max list items that fit in the scroll area
     # Leave 2 lines at the bottom for status & cmd line
@@ -160,7 +161,16 @@ status_line() {
     local mpg321_pid=
 
     mpg321_pid=$(pgrep mpg321)
-    export NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
+    export NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 \
+        | awk -F "/" '{print $NF}')
+
+    export FG_STATUS=$(echo "${NOW_PLAYING}" \
+        | awk -F "\." '{print $1}' \
+        | sed s/'('/''/g \
+        | sed s/')'/''/g \
+        | sed s/-/''/g \
+        | sed s/_/''/g \
+        | sed s/'[0-9]'/''/g)
 
     [[ "${NOW_PLAYING}" == *pipe:[* ]] && {
         kill_music
@@ -816,7 +826,7 @@ mute_or_unmute () {
     [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] &&
         IS_MUTED=true || IS_MUTED=false
 
-    redraw
+    status_line
 }
 
 set_volume () {
@@ -825,7 +835,7 @@ set_volume () {
     [ "${cmd_reply}" -ge 0 ] && [ "${cmd_reply}" -le 100 ] &&
         (2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%)
 
-    redraw
+    status_line
 }
 
 execute_command () {
@@ -1030,7 +1040,8 @@ get_args() {
                 [[ "${2}" ]] && {
                     case "${2}" in
                         "x")
-                            strace -qqfe execve ~/GitHub/shellaro/shellaro "${0}" && exit
+                            strace -qqfe execve ~/GitHub/shellaro/shellaro "${0}"
+                            exit
                         ;;
                     esac
                 }
@@ -1048,12 +1059,24 @@ shellaro_daemon() {
     # Infinite loop
     for ((;;)); {
         local mpg321_pid=
+        local status=
 
         mpg321_pid=$(pgrep mpg321)
 
-        export STATUS_DAEMON=$(readlink -f /proc/"${mpg321_pid}"/fd/3 | awk -F "/" '{print $NF}')
+        status="$(readlink -f /proc/"${mpg321_pid}"/fd/3 \
+            | awk -F "/" '{print $NF}' \
+            | awk -F "\." '{print $1}' \
+            | sed s/'('/''/g \
+            | sed s/')'/''/g \
+            | sed s/-/''/g \
+            | sed s/_/''/g \
+            | sed s/'[0-9]'/''/g)"
 
-        [[ "${STATUS_DAEMON}" == *pipe:[* ]] && {
+        if [[ ! "${FG_STATUS}" == "${status}" ]] && [[ -n "${mpg321_pid}" ]]; then
+            STATUS_DAEMON="${status}"; export "${STATUS_DAEMON}"
+        fi
+
+        [[ "${status}" == *pipe:[* ]] && {
             kill_music
             export STATUS_DAEMON=""
             fatal "readlink has failed"
@@ -1061,7 +1084,7 @@ shellaro_daemon() {
 
         [[ -t 1 ]] || exit 1
 
-        sleep 0.2
+        sleep 1
     }
 }
 
@@ -1138,11 +1161,11 @@ main() {
     for ((;;)); {
         read "${read_flags[@]}" -srn 1 && key "${REPLY}"
 
-        # reload the screen if music changes
-        [[ "${NOW_PLAYING}" != "${STATUS_DAEMON}" ]] && redraw
-
         # Exit if there is no longer a terminal attached
         [[ -t 1 ]] || exit 1
+
+        # reload the screen if music changes
+        if [[ ! "${FG_STATUS}" == "${STATUS_DAEMON}" ]]; then redraw; fi
     }
 }
 
