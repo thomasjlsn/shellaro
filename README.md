@@ -45,8 +45,11 @@ j -- go down
 l -- go to child dir
 h -- go to parent dir
 
-g -- go to top
-G -- go to bottom
+K -- jump up
+J -- jump down
+
+g -- jump to top
+G -- jump to bottom
 
 enter -- go to child dir
 backspace -- go to parent dir
@@ -75,7 +78,7 @@ right arrow -- play song
 
 p -- pause / play
 n -- next song
-K -- stop (kill mpg321)
+X -- stop (kill mpg321)
 
 ; -- find and play song
 
@@ -95,12 +98,12 @@ space -- mark file for playlist
 enter -- play marked files
 
 c -- clear marked selection
-x -- clear marked selection
 
 COMMANDS
 
 :add -- add marked files to playlist
 :del -- delete a playlist
+:list -- go to playlists
 ```
 
 ### Volume
@@ -126,18 +129,8 @@ m -- toggle mute / unmute
 :q -- quit
 :add -- add marked files to playlist
 :del -- delete a playlist
-```
-
-### Other
-
-```
-r -- redraw screen
-R -- restart program (This is intended for testing purposes only and will not work without updating the path in 'key()')
-
-COMMANDS
-
-:debug -- trace
-:debug-x -- trace executables
+:list -- go to playlists
+:kill -- kill music
 ```
 
 ## Configuration
