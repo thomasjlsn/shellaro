@@ -10,7 +10,7 @@
 #                                                         #
 ###########################################################
 
-VERSION="1.5.0"
+VERSION="1.5.1"
 
 # CONFIG
 # TODO external config file
@@ -67,6 +67,7 @@ export INCREMENT_VOLUME=5
 # Cache directory
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
+# Error Logging
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
 error() { echo "[ERROR]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; }
 fatal() { echo "[FATAL]   $*" | tee -a "${ERROR_LOG_FILE}" >&2 ; exit 1 ; }
@@ -93,21 +94,22 @@ cleanup() {
     # '\e[?1049l: Restore main screen buffer.
     printf '\e[?7h\e[?25h\e[2J\e[;r\e[?1049l'
 
-    [[ "${DEBUG}" == true ]] && {
-        set +x
-        DEBUG=false
-    }
     set +o nolog
     set +o pipefail
-
-    echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
-
     set +h
+
+    echo "" > "${XDG_CACHE_HOME}/shellaro/now_playing"
+    echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
 
     # Show input
     stty echo
 
     kill -SIGTERM "$(awk 'NR==1{print}' "${XDG_CACHE_HOME}"/shellaro/daemon_pid)"
+
+    [[ "${DEBUG}" == true ]] && {
+        set +x
+        DEBUG=false
+    }
 
 #    clear
     exit 0
@@ -161,15 +163,16 @@ status_line() {
     local mpg321_pid=
 
     mpg321_pid=$(pgrep mpg321)
-    export NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 \
+    NOW_PLAYING=$(readlink -f /proc/"${mpg321_pid}"/fd/3 \
         | awk -F "/" '{print $NF}')
 
-    export FG_STATUS=$(echo "${NOW_PLAYING}" \
+    FG_STATUS=$(echo "${NOW_PLAYING}" \
         | awk -F "\." '{print $1}' \
         | sed s/'('/''/g \
         | sed s/')'/''/g \
         | sed s/-/''/g \
         | sed s/_/''/g \
+        | sed s/\'/''/g \
         | sed s/'[0-9]'/''/g)
 
     [[ "${NOW_PLAYING}" == *pipe:[* ]] && {
@@ -190,7 +193,10 @@ status_line() {
         volume="${ICON_MUTED}"
         color="${COLOR_MUTED}"
     else
-        volume="$(amixer -D pulse get Master | awk '/Left:/' | awk -F '[\[\]]' '{print $2" "}' || "$(error "volume pipe has failed")")"
+        volume="$(amixer -D pulse get Master \
+            | awk '/Left:/' \
+            | awk -F '[\[\]]' '{print $2" "}' \
+            || error "volume pipe has failed")"
     fi
 
     if [ -n "${mpg321_pid}" ]; then
@@ -571,17 +577,18 @@ pause_or_play () {
     if [ -z "${mpg321_pid}" ]; then
         # If list item is a dir, play all in dir
         if [[ -d ${list[scroll]} ]]; then
-            (2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &)
-            IS_PAUSED=false
-            STARTED=$(date +%s%3N)
-            reload; return
-
-        else
+            (2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &)
+        elif [[ ${list[scroll]} == *.mp3 ]]; then
             (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
-            IS_PAUSED=false
-            STARTED=$(date +%s%3N)
-            reload; return
+        elif [[ ${list[scroll]} == *.list ]]; then
+            (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
+        elif [[ ${list[scroll]} == */ALL ]]; then
+            (2>/dev/null 1>&2 mpg321 "${MUSIC_DIRECTORY}" -B &)
         fi
+
+        IS_PAUSED=false
+        STARTED=$(date +%s%3N)
+        reload; return
     fi
 
     mpg321_status=$(awk 'NR==3{print $2}' "/proc/${mpg321_pid}/status")
@@ -604,9 +611,15 @@ pause_or_play () {
 play_all_in_dir () {
     kill_music
 
-    [[ -d ${list[scroll]} ]] && {
+    if [[ -d ${list[scroll]} ]]; then
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &)
-    }|| (2>/dev/null 1>&2 mpg321 ./*.mp3 &)
+    elif [[ ${list[scroll]} == *.mp3 ]]; then
+        (2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &)
+    elif [[ ${list[scroll]} == *.list ]]; then
+        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
+    elif [[ ${list[scroll]} == */ALL ]]; then
+        (2>/dev/null 1>&2 mpg321 "${MUSIC_DIRECTORY}" -B &)
+    fi
 
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
@@ -617,9 +630,15 @@ play_all_in_dir () {
 shuffle_all_in_dir () {
     kill_music
 
-    [[ -d ${list[scroll]} ]] && {
+    if [[ -d ${list[scroll]} ]]; then
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &)
-    }|| (2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &)
+    elif [[ ${list[scroll]} == *.mp3 ]]; then
+        (2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &)
+    elif [[ ${list[scroll]} == *.list ]]; then
+        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
+    elif [[ ${list[scroll]} == */ALL ]]; then
+        (2>/dev/null 1>&2 mpg321 "${MUSIC_DIRECTORY}" -B --shuffle &)
+    fi
 
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
@@ -629,8 +648,11 @@ shuffle_all_in_dir () {
 
 mark_song_for_playlist () {
     # Don't mark dirs
-    [[ -d ${list[scroll]} ]] &&
-        :|| mark "${scroll}" #"${1}"
+    if [[ -d ${list[scroll]} ]]; then
+        :
+    else
+        mark "${scroll}"
+    fi
 
     # Scroll down one item
     ((scroll < list_total)) && {
@@ -645,36 +667,33 @@ mark_song_for_playlist () {
 }
 
 play_marked_songs () {
+    if [[ -d ${list[scroll]} ]]; then
+        open "${list[scroll]}"
+        return
+    fi
+
+    kill_music
+
     if ((${#marked_files[@]} != 0)); then
         playlist_file="${XDG_CACHE_HOME}/shellaro/playlist"
         # Save marked files to a file and open them for editing
         printf '%s\n' "${marked_files[@]}" > "${playlist_file}"
 
-        kill_music
         (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" &)
 
         marked_files=()
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-        reload; return
 
     elif [[ ${list[scroll]} == *.mp3 ]]; then
-        kill_music
         (2>/dev/null 1>&2 mpg321 "${list[scroll]}" &)
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-        reload; return
-
     elif [[ ${list[scroll]} == *.list ]]; then
-        kill_music
-        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-        reload; return
-
-    elif [[ -d ${list[scroll]} ]]; then
-        open "${list[scroll]}"
+        (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
+    elif [[ ${list[scroll]} == */ALL ]]; then
+        (2>/dev/null 1>&2 mpg321 "${MUSIC_DIRECTORY}" -B &)
     fi
+
+    IS_PAUSED=false
+    STARTED=$(date +%s%3N)
+    reload
 }
 
 # TODO better playlists, this is just a quick solution to get it working
@@ -854,6 +873,10 @@ execute_command () {
         delete_playlist
     fi
 
+    if [[ "${cmd_reply}" == "kill" ]]; then
+        kill_music
+    fi
+
     if [[ "${cmd_reply}" == "list" ]]; then
         open "${MUSIC_DIRECTORY}"/.playlists
     fi
@@ -940,6 +963,18 @@ scroll_up () {
     }
 }
 
+jump_down () {
+    for i in {1..5}; do
+        scroll_down
+    done
+}
+
+jump_up () {
+    for i in {1..5}; do
+        scroll_up
+    done
+}
+
 toggle_hidden_files () {
     # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'.
     #                This also works for '3' or more values with
@@ -960,7 +995,11 @@ key() {
 
         j|B|$'\eOB'|$'\e[B') scroll_down ;;
 
+        J) jump_down ;;
+
         k|A|$'\eOA'|$'\e[A') scroll_up ;;
+
+        K) jump_up ;;
 
         # Jump to top
         g) ((scroll != 0)) && ((scroll=0)); redraw ;;
@@ -982,7 +1021,7 @@ key() {
         "") play_marked_songs ;;
 
         # " " SPACE key, clear selection
-        x|c) marked_files=(); redraw;;
+        c) marked_files=(); redraw;;
 
         p) pause_or_play ;;
 
@@ -1012,13 +1051,15 @@ key() {
         [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "${favorite}" ;;
 
         # Kill mpg321
-        K) kill_music; reload ;;
+        X) kill_music; reload ;;
 
         # Redraw, useful when bugs appear!
         r) clear_screen; redraw full; reload ;;
 
         # Create a new instance of the program
-        # and exit the current instance (for testing)
+        # and exit the current instance (for testing).
+        # NOTE this will leave extra processes running
+        # on exit.
         R)
             kill -SIGTERM "$(awk 'NR==1{print}' "${XDG_CACHE_HOME}"/shellaro/daemon_pid)"
             ~/GitHub/shellaro/shellaro "${0}" && exit
@@ -1070,11 +1111,11 @@ shellaro_daemon() {
             | sed s/')'/''/g \
             | sed s/-/''/g \
             | sed s/_/''/g \
+            | sed s/\'/''/g \
             | sed s/'[0-9]'/''/g)"
 
-        if [[ ! "${FG_STATUS}" == "${status}" ]] && [[ -n "${mpg321_pid}" ]]; then
-            STATUS_DAEMON="${status}"; export "${STATUS_DAEMON}"
-        fi
+
+        echo "${status}" > "${XDG_CACHE_HOME}"/shellaro/now_playing
 
         [[ "${status}" == *pipe:[* ]] && {
             kill_music
@@ -1126,8 +1167,13 @@ main() {
     # Trap the window resize signal (handle window resize events)
     trap 'get_term_size; redraw' WINCH
 
+    # TODO install script
     [[ ! -d "${MUSIC_DIRECTORY}/.playlists" ]] && {
         mkdir -p "${MUSIC_DIRECTORY}/.playlists"
+    }
+
+    [[ ! -f "${MUSIC_DIRECTORY}/.playlists/ALL" ]] && {
+        touch "${MUSIC_DIRECTORY}/.playlists/ALL"
     }
 
     [[ ! -d "${XDG_CACHE_HOME}/shellaro" ]] && {
@@ -1144,6 +1190,10 @@ main() {
 
     [[ ! -f "${XDG_CACHE_HOME}/shellaro/daemon_pid" ]] && {
         touch "${XDG_CACHE_HOME}/shellaro/daemon_pid"
+    }
+
+    [[ ! -f "${XDG_CACHE_HOME}/shellaro/now_playing" ]] && {
+        touch "${XDG_CACHE_HOME}/shellaro/now_playing"
     }
 
     get_term_size
@@ -1165,7 +1215,7 @@ main() {
         [[ -t 1 ]] || exit 1
 
         # reload the screen if music changes
-        if [[ ! "${FG_STATUS}" == "${STATUS_DAEMON}" ]]; then redraw; fi
+        if [[ "${FG_STATUS}" != "$(cat "${XDG_CACHE_HOME}"/shellaro/now_playing)" ]]; then reload; fi
     }
 }
 
