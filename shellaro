@@ -930,6 +930,7 @@ go_to_parent () {
     elif [[ "${PWD}" = *"${MUSIC_DIRECTORY}/"* ]]; then
         find_previous=1
         open "${PWD%/*}"
+        redraw full
     fi
 }
 
