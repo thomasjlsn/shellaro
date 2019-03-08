@@ -927,10 +927,13 @@ go_to_parent () {
 
     # If '$PWD' is not $MUSIC_DIRECTORY or a subdirectory
     # of, don't go to parent
-    elif [[ "${PWD}" = *"${MUSIC_DIRECTORY}/"* ]]; then
+    elif [[ "${PWD}" = *"${MUSIC_DIRECTORY}/.playlists" ]]; then
         find_previous=1
         open "${PWD%/*}"
         redraw full
+    elif [[ "${PWD}" = *"${MUSIC_DIRECTORY}/"* ]]; then
+        find_previous=1
+        open "${PWD%/*}"
     fi
 }
 
