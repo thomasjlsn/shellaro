@@ -279,6 +279,8 @@ format_line() {
         format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
     fi
 
+    suffix+='                                                                                                                                                                                          '
+
     # If the item is under the cursor
     (($1 == scroll)) &&
         format+="\\e[1;${COLOR_CURSOR};7m"
@@ -1134,6 +1136,11 @@ shellaro_daemon() {
 }
 
 main() {
+
+    ! [[ $(which mpg321) ]] && {
+        echo "shellaro requires mpg321, is it installed?"
+        exit 1
+    }
     # Don't record function calls in command history
     set -o nolog
 
