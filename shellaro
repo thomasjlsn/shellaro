@@ -566,7 +566,7 @@ next_song () {
         else
             return
         fi
-    }||:
+    }
 }
 
 pause_or_play () {
@@ -731,15 +731,15 @@ delete_playlist () {
 }
 
 find_current_song () {
-    local mpg321_pid=
+    local _mpg321_pid=
 
-    mpg321_pid=$(pgrep mpg321)
+    _mpg321_pid=$(pgrep mpg321)
 
     # If mpg231 is not running, don't search
-    [[ -z "${mpg321_pid}" ]] &&
+    [[ -z "$_mpg321_pid" ]] &&
         return
 
-    open "$(locate "$(readlink -f /proc/"${mpg321_pid}"/fd/3  \
+    open "$(locate "$(readlink -f /proc/"$_mpg321_pid"/fd/3  \
         | awk -F "/" '{print $NF}')" \
         | awk -F "/" '{$NF=""; print $0}' \
         | sed s/' '/'\/'/g)" || exit 1
@@ -748,73 +748,64 @@ find_current_song () {
 }
 
 find_and_play () {
-    local search_result=
-
     cmd_line "locate: "
 
     if [[ -n "${cmd_reply}" ]]; then
-        search_result="$(locate -iqt "${cmd_reply}" | sed q)"
+        local _search_result=
 
-        if [[ "${search_result}" = "$MUSIC_DIRECTORY/"* ]]; then
-            if [[ -d ${search_result} ]];then
+        set_status () {
+            IS_PAUSED=false
+            STARTED=$(date +%s%3N)
+        }
+
+        _search_result="$(locate -iqt "${cmd_reply}" | sed q)"
+
+        if [[ "$_search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+            if [[ -d "$_search_result" ]];then
                 kill_music
-                (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
+                (2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &)
+                set_status
 
-                IS_PAUSED=false
-                STARTED=$(date +%s%3N)
-                reload; return
-
-            elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
+            elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
                 kill_music
-                (2>/dev/null 1>&2 mpg321 "${search_result}" &)
+                (2>/dev/null 1>&2 mpg321 "$_search_result" &)
+                set_status
 
-                IS_PAUSED=false
-                STARTED=$(date +%s%3N)
-                reload; return
-
-            elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
-                playlist_file="${search_result}"
+            elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.list ]]; then
+                playlist_file="$_search_result"
 
                 kill_music
-                (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
-
-                IS_PAUSED=false
-                STARTED=$(date +%s%3N)
-                reload; return
+                (2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &)
+                set_status
 
             else
-                search_result="$(locate -qt "${cmd_reply}" | sed q)"
+                _search_result="$(locate -qt "$cmd_reply" | sed q)"
 
-                if [[ "${search_result}" = "${MUSIC_DIRECTORY}/"* ]]; then
-                    if [[ -d ${search_result} ]]; then
+                if [[ "$_search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+                    if [[ -d $_search_result ]]; then
                         kill_music
-                        (2>/dev/null 1>&2 mpg321 "${search_result}" -B --shuffle &)
+                        (2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &)
+                        set_status
 
-                        IS_PAUSED=false
-                        STARTED=$(date +%s%3N)
-                        reload; return
-
-                    elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.mp3 ]]; then
+                    elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
                         kill_music
-                        (2>/dev/null 1>&2 mpg321 "${search_result}" &)
+                        (2>/dev/null 1>&2 mpg321 "$_search_result" &)
+                        set_status
 
-                        IS_PAUSED=false
-                        STARTED=$(date +%s%3N)
-                        reload; return
-
-                    elif [[ "${search_result}" = "${MUSIC_DIRECTORY}/"*.list ]]; then
-                        playlist_file="${search_result}"
+                    elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.list ]]; then
+                        playlist_file="$_search_result"
 
                         kill_music
-                        (2>/dev/null 1>&2 mpg321 --list "${playlist_file}" --shuffle &)
-
-                        IS_PAUSED=false
-                        STARTED=$(date +%s%3N)
-                        reload; return
+                        (2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &)
+                        set_status
                     fi
                 fi
             fi
         fi
+
+        unset set_status
+        reload
+
     fi
 }
 
