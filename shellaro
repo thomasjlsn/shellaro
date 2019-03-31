@@ -271,6 +271,9 @@ format_line() {
         _format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
         _suffix+='/'
 
+    elif [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]]; then
+        _suffix+='♫ '
+
     else
         _format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
     fi
@@ -291,7 +294,6 @@ format_line() {
 
     [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]] && {
         _format+="\\e[${fi:-${COLOR_CURRENT_SONG_BOLD};${COLOR_CURRENT_SONG}m}"
-        _suffix+='♫ '
     }
 
     # Escape the directory string
@@ -850,8 +852,9 @@ mute_or_unmute () {
 set_volume () {
     cmd_line "volume: "
     # if cmd_reply is between 0 & 100
-    [ "$cmd_reply" -ge 0 ] && [ "$cmd_reply" -le 100 ] &&
-        (2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}"%)
+    if [[ "$cmd_reply" -ge 0 ]] && [[ "$cmd_reply" -le 100 ]]; then
+        (2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}%")
+    fi
 
     status_line
 }
