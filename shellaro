@@ -13,6 +13,7 @@
 VERSION="1.5.1"
 
 # CONFIG
+#{{{
 # TODO external config file
 
 # The directory Shellaro looks in for music
@@ -66,6 +67,7 @@ export INCREMENT_VOLUME=5
 
 # Cache directory
 export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+#}}}
 
 # Error Logging
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
@@ -73,12 +75,13 @@ error() { echo "[ERROR]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; }
 fatal() { echo "[FATAL]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; exit 1 ; }
 
 setup_tui() {
+    # escapes {{{
     # '\e[?1049h': Use alternative screen buffer.
     # '\e[?7l':    Disable line wrapping.
     # '\e[?25l':   Hide the cursor.
     # '\e[2J':     Clear the screen.
     # '\e[1;Nr':   Limit scrolling to scrolling area.
-    #              Also sets cursor to (0,0).
+    #              Also sets cursor to (0,0). }}}
     printf '\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr' "$max_items"
 
     # Hide input
@@ -86,12 +89,13 @@ setup_tui() {
 }
 
 cleanup() {
+    # escapes {{{
     # '\e[?7h':   Re-enable line wrapping.
     # '\e[?25h':  Unhide the cursor.
     # '\e[2J':    Clear the terminal.
     # '\e[;r':    Set the scroll region to its default value.
     #             Also sets cursor to (0,0).
-    # '\e[?1049l: Restore main screen buffer.
+    # '\e[?1049l: Restore main screen buffer. }}}
     printf '\e[?7h\e[?25h\e[2J\e[;r\e[?1049l'
 
     set +o nolog
@@ -116,12 +120,13 @@ cleanup() {
 }
 
 clear_screen() {
+    # escapes {{{
     # '\e[%sH':    Move cursor to bottom of scroll area.
     # '\e[9999C':  Move cursor to right edge of the terminal.
     # '\e[1J':     Clear screen to top left corner (from cursor up).
     # '\e[2J':     Clear screen fully (if using tmux) (fixes clear issues).
     # '\e[1;%sr':  Clearing the screen resets the scroll region(?). Re-set it.
-    #              Also sets cursor to (0,0).
+    #              Also sets cursor to (0,0). }}}
     printf '\e[%sH\e[9999C\e[1J%b\e[1;%sr' \
            "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
 }
@@ -160,20 +165,17 @@ status_line() {
     local _color=
     local _icon=
     local _volume=
+    local _current_song_path
     local _mpg321_pid=
 
     _mpg321_pid=$(pgrep mpg321)
-    NOW_PLAYING=$(readlink -f "/proc/${_mpg321_pid}/fd/3" \
+    _current_song_path=$(readlink -f "/proc/${_mpg321_pid}/fd/3")
+
+    NOW_PLAYING=$(echo "$_current_song_path" \
         | awk -F "/" '{print $NF}')
 
-    FG_STATUS=$(echo "$NOW_PLAYING" \
-        | awk -F "\." '{print $1}' \
-        | sed s/'('/''/g \
-        | sed s/')'/''/g \
-        | sed s/-/''/g \
-        | sed s/_/''/g \
-        | sed s/\'/''/g \
-        | sed s/'[0-9]'/''/g)
+    FG_STATUS=$(echo "$_current_song_path" \
+        | tr -cd "[:alnum:]")
 
     [[ "$NOW_PLAYING" == *pipe:[* ]] && {
         kill_music
@@ -210,6 +212,7 @@ status_line() {
     _mark_ui="[${#marked_files[@]}]"
     format_status_line="${_icon} ${_volume}${marked_files[*]:+${_mark_ui}} ${NOW_PLAYING}"
 
+    # escapes {{{
     # '\e7':       Save cursor position.
     #              This is more widely supported than '\e[s'.
     # '\e[%sH':    Move cursor to bottom of the terminal.
@@ -221,7 +224,7 @@ status_line() {
     # '\e[m':      Reset text formatting.
     # '\e[H\e[K':  Clear line below status_line.
     # '\e8':       Restore cursor position.
-    #              This is more widely supported than '\e[u'.
+    #              This is more widely supported than '\e[u'. }}}
     printf '\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8' \
            "$((LINES-1))" \
            "${_color}" \
@@ -363,6 +366,13 @@ redraw() {
     clear_screen
     draw_dir
     status_line
+}
+
+refresh () {
+    sleep 0.2
+    clear_screen
+    redraw
+    redraw
 }
 
 mark() {
@@ -533,15 +543,6 @@ kill_music () {
     fi
 }
 
-reload () {
-    # Redraw screen twice, first time updates status_line,
-    # second time updates COLOR_CURRENT_SONG
-    sleep 0.2
-    clear_screen
-    redraw
-    redraw
-}
-
 next_song () {
     local _min_age=
     local _keypress=
@@ -568,7 +569,7 @@ next_song () {
             (2>/dev/null 1>&2 killall -s SIGINT mpg321)
             STARTED=$(date +%s%3N)
 
-            reload
+            refresh
         else
             return
         fi
@@ -595,7 +596,7 @@ pause_or_play () {
 
         IS_PAUSED=false
         STARTED=$(date +%s%3N)
-        reload; return
+        refresh; return
     fi
 
 
@@ -607,14 +608,14 @@ pause_or_play () {
     if [[ $_mpg321_status == "S" ]]; then
         (kill -STOP "$_mpg321_pid")
         IS_PAUSED=true
-        reload; return
+        refresh; return
 
     # Elif stopped; resume
     elif [[ $_mpg321_status == "T" ]]; then
         (kill -CONT "$_mpg321_pid")
         IS_PAUSED=false
         STARTED=$(date +%s%3N)
-        reload; return
+        refresh; return
     fi
 }
 
@@ -634,7 +635,7 @@ play_all_in_dir () {
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
 
-    reload
+    refresh
 }
 
 shuffle_all_in_dir () {
@@ -653,7 +654,7 @@ shuffle_all_in_dir () {
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
 
-    reload
+    refresh
 }
 
 mark_song_for_playlist () {
@@ -703,7 +704,7 @@ play_marked_songs () {
 
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
-    reload
+    refresh
 }
 
 # TODO better playlists, this is just a quick solution to get it working
@@ -752,7 +753,7 @@ find_current_song () {
         | awk -F "/" '{$NF=""; print $0}' \
         | sed s/' '/'\/'/g)" || exit 1
 
-    reload
+    refresh
 }
 
 find_and_play () {
@@ -812,7 +813,7 @@ find_and_play () {
         fi
 
         unset set_status
-        reload
+        refresh
 
     fi
 }
@@ -838,7 +839,7 @@ shuffle_all () {
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
 
-    reload
+    refresh
 }
 
 mute_or_unmute () {
@@ -883,17 +884,17 @@ execute_command () {
         open "${MUSIC_DIRECTORY}"/.playlists
     fi
 
-    if [[ "$cmd_reply" == "debug" ]]; then
-        set -x
-        DEBUG=true
-        redraw full
-    fi
+#    if [[ "$cmd_reply" == "debug" ]]; then
+#        set -x
+#        DEBUG=true
+#        redraw full
+#    fi
 
-    if [[ "$cmd_reply" == "debug-x" ]]; then
-        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
-        DEBUG=true
-        redraw full
-    fi
+#    if [[ "$cmd_reply" == "debug-x" ]]; then
+#        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
+#        DEBUG=true
+#        redraw full
+#    fi
 }
 
 go_to_child () {
@@ -904,7 +905,7 @@ go_to_child () {
         IS_PAUSED=false
         STARTED=$(date +%s%3N)
 
-        reload
+        refresh
 
     elif [[ ${list[scroll]} == *.list ]]; then
         kill_music
@@ -913,7 +914,7 @@ go_to_child () {
         IS_PAUSED=false
         STARTED=$(date +%s%3N)
 
-        reload
+        refresh
 
     elif [[ -d ${list[scroll]} ]]; then
         open "${list[scroll]}"
@@ -1055,10 +1056,10 @@ key() {
         [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "$favorite" ;;
 
         # Kill mpg321
-        X) kill_music; reload ;;
+        X) kill_music; refresh ;;
 
         # Redraw, useful when bugs appear!
-        r) clear_screen; redraw full; reload ;;
+        r) clear_screen; redraw full; refresh ;;
 
         # Create a new instance of the program
         # and exit the current instance (for testing).
@@ -1108,24 +1109,10 @@ shellaro_daemon() {
 
         _mpg321_pid=$(pgrep mpg321)
 
-        _status="$(readlink -f /proc/"${_mpg321_pid}"/fd/3 \
-            | awk -F "/" '{print $NF}' \
-            | awk -F "\." '{print $1}' \
-            | sed s/'('/''/g \
-            | sed s/')'/''/g \
-            | sed s/-/''/g \
-            | sed s/_/''/g \
-            | sed s/\'/''/g \
-            | sed s/'[0-9]'/''/g)"
-
+        _status=$(readlink -f /proc/"${_mpg321_pid}"/fd/3 \
+            | tr -cd "[:alnum:]")
 
         echo "$_status" > "${XDG_CACHE_HOME}/shellaro/now_playing"
-
-        [[ "$_status" == *pipe:[* ]] && {
-            kill_music
-            export STATUS_DAEMON=""
-            fatal "readlink has failed"
-        }
 
         [[ -t 1 ]] || exit 1
 
@@ -1134,11 +1121,11 @@ shellaro_daemon() {
 }
 
 main() {
-
-    ! [[ $(which mpg321) ]] && {
+    ! [ "$(which mpg321)" ] && {
         echo "shellaro requires mpg321, is it installed?"
         exit 1
     }
+
     # Don't record function calls in command history
     set -o nolog
 
@@ -1177,6 +1164,7 @@ main() {
     trap 'get_term_size; redraw' WINCH
 
     # TODO install script
+    #{{{
     [[ ! -d "${MUSIC_DIRECTORY}/.playlists" ]] && {
         mkdir -p "${MUSIC_DIRECTORY}/.playlists"
     }
@@ -1204,6 +1192,7 @@ main() {
     [[ ! -f "${XDG_CACHE_HOME}/shellaro/now_playing" ]] && {
         touch "${XDG_CACHE_HOME}/shellaro/now_playing"
     }
+    #}}}
 
     get_term_size
     setup_tui
@@ -1223,8 +1212,8 @@ main() {
         # Exit if there is no longer a terminal attached
         [[ -t 1 ]] || exit 1
 
-        # reload the screen if music changes
-        if [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]]; then reload; fi
+        # refresh the screen if music changes
+        [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]] && refresh
     }
 }
 
