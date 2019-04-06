@@ -17,7 +17,10 @@ VERSION="1.5.1"
 # TODO external config file
 
 # The directory Shellaro looks in for music
-export MUSIC_DIRECTORY=~/Music
+export XDG_MUSIC_DIR=${XDG_MUSIC_DIR:-$HOME/Music}
+
+# Cache directory
+export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
 # Shortcuts corresponding to number keys
 export SHORTCUT_1=~/Music/LedZeppelin
@@ -64,9 +67,6 @@ export ICON_MUTED="MUTE"
 
 # Percent to raise or lower volume
 export INCREMENT_VOLUME=5
-
-# Cache directory
-export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 #}}}
 
 # Error Logging
@@ -115,7 +115,6 @@ cleanup() {
         DEBUG=false
     }
 
-#    clear
     exit 0
 }
 
@@ -591,7 +590,7 @@ pause_or_play () {
         elif [[ ${list[scroll]} == *.list ]]; then
             (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
         elif [[ ${list[scroll]} == */ALL ]]; then
-            (2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B &)
+            (2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &)
         fi
 
         IS_PAUSED=false
@@ -629,7 +628,7 @@ play_all_in_dir () {
     elif [[ ${list[scroll]} == *.list ]]; then
         (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
     elif [[ ${list[scroll]} == */ALL ]]; then
-        (2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B &)
+        (2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &)
     fi
 
     IS_PAUSED=false
@@ -648,7 +647,7 @@ shuffle_all_in_dir () {
     elif [[ ${list[scroll]} == *.list ]]; then
         (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &)
     elif [[ ${list[scroll]} == */ALL ]]; then
-        (2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &)
+        (2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &)
     fi
 
     IS_PAUSED=false
@@ -699,7 +698,7 @@ play_marked_songs () {
     elif [[ ${list[scroll]} == *.list ]]; then
         (2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &)
     elif [[ ${list[scroll]} == */ALL ]]; then
-        (2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B &)
+        (2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &)
     fi
 
     IS_PAUSED=false
@@ -713,7 +712,7 @@ add_marked_to_playlist () {
 
     if ((${#marked_files[@]} != 0)); then
         cmd_line "add to: "
-        _custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
+        _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
         # Save marked files to a file and open them for editing
         printf '%s\n' "${marked_files[@]}" >> "$_custom_playlist"
 
@@ -727,9 +726,9 @@ delete_playlist () {
 
     cmd_line "delete playlist: "
 
-    _custom_playlist="${MUSIC_DIRECTORY}/.playlists/${cmd_reply}.list"
+    _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
 
-    if [[ -f "$_custom_playlist" ]] && [[ "$PWD" == "${MUSIC_DIRECTORY}"/.playlists ]]; then
+    if [[ -f "$_custom_playlist" ]] && [[ "$PWD" == "${XDG_MUSIC_DIR}"/.playlists ]]; then
         rm "$_custom_playlist"
         redraw full; return
     elif [[ -f "$_custom_playlist" ]]; then
@@ -769,18 +768,18 @@ find_and_play () {
 
         _search_result="$(locate -iqt "$cmd_reply" | sed q)"
 
-        if [[ "$_search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+        if [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]]; then
             if [[ -d "$_search_result" ]];then
                 kill_music
                 (2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &)
                 set_status
 
-            elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
+            elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
                 kill_music
                 (2>/dev/null 1>&2 mpg321 "$_search_result" &)
                 set_status
 
-            elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.list ]]; then
+            elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
                 playlist_file="$_search_result"
 
                 kill_music
@@ -790,18 +789,18 @@ find_and_play () {
             else
                 _search_result="$(locate -qt "$cmd_reply" | sed q)"
 
-                if [[ "$_search_result" = "$MUSIC_DIRECTORY/"* ]]; then
+                if [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]]; then
                     if [[ -d $_search_result ]]; then
                         kill_music
                         (2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &)
                         set_status
 
-                    elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.mp3 ]]; then
+                    elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
                         kill_music
                         (2>/dev/null 1>&2 mpg321 "$_search_result" &)
                         set_status
 
-                    elif [[ "$_search_result" = "$MUSIC_DIRECTORY/"*.list ]]; then
+                    elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
                         playlist_file="$_search_result"
 
                         kill_music
@@ -834,7 +833,7 @@ search_in_dir () {
 
 shuffle_all () {
     kill_music
-    (2>/dev/null 1>&2 mpg321 "$MUSIC_DIRECTORY" -B --shuffle &)
+    (2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &)
 
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
@@ -881,7 +880,7 @@ execute_command () {
     fi
 
     if [[ "$cmd_reply" == "list" ]]; then
-        open "${MUSIC_DIRECTORY}"/.playlists
+        open "${XDG_MUSIC_DIR}"/.playlists
     fi
 
 #    if [[ "$cmd_reply" == "debug" ]]; then
@@ -928,13 +927,13 @@ go_to_parent () {
     if ((search == 1 && search_end_early != 1)); then
         open "$PWD"
 
-    # If '$PWD' is not $MUSIC_DIRECTORY or a subdirectory
+    # If '$PWD' is not $XDG_MUSIC_DIR or a subdirectory
     # of, don't go to parent
-    elif [[ "$PWD" == *"${MUSIC_DIRECTORY}/.playlists" ]]; then
+    elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/.playlists" ]]; then
         find_previous=1
         open "${PWD%/*}"
         redraw full
-    elif [[ "$PWD" == *"${MUSIC_DIRECTORY}/"* ]]; then
+    elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/"* ]]; then
         find_previous=1
         open "${PWD%/*}"
     fi
@@ -1032,9 +1031,9 @@ key() {
 
         n) next_song ;;
 
-        \`) open "${MUSIC_DIRECTORY}/.playlists" ;;
+        \`) open "${XDG_MUSIC_DIR}/.playlists" ;;
 
-        ~|0) open "$MUSIC_DIRECTORY" ;;
+        ~|0) open "$XDG_MUSIC_DIR" ;;
 
         a) play_all_in_dir ;;
 
@@ -1165,12 +1164,12 @@ main() {
 
     # TODO install script
     #{{{
-    [[ ! -d "${MUSIC_DIRECTORY}/.playlists" ]] && {
-        mkdir -p "${MUSIC_DIRECTORY}/.playlists"
+    [[ ! -d "${XDG_MUSIC_DIR}/.playlists" ]] && {
+        mkdir -p "${XDG_MUSIC_DIR}/.playlists"
     }
 
-    [[ ! -f "${MUSIC_DIRECTORY}/.playlists/ALL" ]] && {
-        touch "${MUSIC_DIRECTORY}/.playlists/ALL"
+    [[ ! -f "${XDG_MUSIC_DIR}/.playlists/ALL" ]] && {
+        touch "${XDG_MUSIC_DIR}/.playlists/ALL"
     }
 
     [[ ! -d "${XDG_CACHE_HOME}/shellaro" ]] && {
@@ -1199,7 +1198,7 @@ main() {
 
     set +e
 
-    open "${MUSIC_DIRECTORY}" || fatal "could not open MUSIC_DIRECTORY"
+    open "${XDG_MUSIC_DIR}" || fatal "could not open XDG_MUSIC_DIR"
     redraw full
 
     # Run and cache PID for cleanup

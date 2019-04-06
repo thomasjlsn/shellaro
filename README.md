@@ -55,7 +55,7 @@ enter -- go to child dir
 backspace -- go to parent dir
 
 ` -- go to playlists
-~ -- go home ($MUSIC_DIRECTORY)
+~ -- go home ($XDG_MUSIC_DIR)
 
 [1-9] -- favorites
 
@@ -84,12 +84,12 @@ X -- stop (kill mpg321)
 
 a -- play all songs in directory
 s -- shuffle all songs in directory
-S -- shuffle all songs in $MUSIC_DIRECTORY
+S -- shuffle all songs in $XDG_MUSIC_DIR
 ```
 
 ### Playlists
 
-*playlists are saved to $MUSIC_DIRECTORY/.playlists*
+*playlists are saved to $XDG_MUSIC_DIR/.playlists*
 
 *playlists are saved as 'somename.list'*
 
@@ -135,7 +135,7 @@ m -- toggle mute / unmute
 
 ## Configuration
 
-**$MUSIC_DIRECTORY** is the base directory that Shellaro uses (this assumes you have all your music contained within a single directory)
+**$XDG_MUSIC_DIR** is the base directory that Shellaro uses (this assumes you have all your music contained within a single directory)
 
 the **$SHORTCUT** variables are used to set the paths for directory shortcuts which use the 1-9 keys
 
