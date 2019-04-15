@@ -71,10 +71,10 @@ export INCREMENT_VOLUME=5
 
 # Error Logging
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
-error() { echo "[ERROR]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; }
-fatal() { echo "[FATAL]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; exit 1 ; }
+error () { echo "[ERROR]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; }
+fatal () { echo "[FATAL]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; exit 1 ; }
 
-setup_tui() {
+setup_tui () {
     # escapes {{{
     # '\e[?1049h': Use alternative screen buffer.
     # '\e[?7l':    Disable line wrapping.
@@ -88,7 +88,7 @@ setup_tui() {
     stty -echo
 }
 
-cleanup() {
+cleanup () {
     # escapes {{{
     # '\e[?7h':   Re-enable line wrapping.
     # '\e[?25h':  Unhide the cursor.
@@ -109,7 +109,7 @@ cleanup() {
     stty echo
 
     2>/dev/null kill -SIGTERM \
-        "$(awk 'NR==1{print}' \
+        "$(2>/dev/null awk 'NR==1{print}' \
         "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
 
     [[ "$DEBUG" == true ]] && {
@@ -120,7 +120,7 @@ cleanup() {
     exit 0
 }
 
-clear_screen() {
+clear_screen () {
     # escapes {{{
     # '\e[%sH':    Move cursor to bottom of scroll area.
     # '\e[9999C':  Move cursor to right edge of the terminal.
@@ -134,7 +134,7 @@ clear_screen() {
            "$((LINES-2))" "$max_items"
 }
 
-get_term_size() {
+get_term_size () {
     #read -r LINES COLUMNS < <(stty size)
     shopt -s checkwinsize; (:;:)
 
@@ -143,15 +143,15 @@ get_term_size() {
     ((max_items=LINES-2))
 }
 
-set_initial_status() {
+set_initial_status () {
     local _mpg321_pid=
 
     _mpg321_pid="$(pgrep mpg321)"
 
     [ -n "$_mpg321_pid" ] && {
-        if [[ $(awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "S" ]]; then
+        if [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "S" ]]; then
             IS_PAUSED=false
-        elif [[ $(awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
+        elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
             IS_PAUSED=true
         fi
 
@@ -163,7 +163,7 @@ set_initial_status() {
     STARTED=$(date +%s%3N)
 }
 
-status_line() {
+status_line () {
     local _mark_ui=
     local _color=
     local _icon=
@@ -235,7 +235,7 @@ status_line() {
            "${format_status_line:-/}"
 }
 
-read_dir() {
+read_dir () {
     local _dirs=()
     local _files=()
     local _item_index
@@ -263,7 +263,7 @@ read_dir() {
     cur_list=("${list[@]}")
 }
 
-format_line() {
+format_line () {
     local _file_name=
     local _format
     local _suffix
@@ -309,7 +309,7 @@ format_line() {
     printf "\r%b%s\e[m\r" "${_format}" "${_file_name}${_suffix}"
 }
 
-draw_dir() {
+draw_dir () {
     # Print the max directory items that fit in the scroll area
     local _scroll_start=
     local _scroll_new_pos=
@@ -361,7 +361,7 @@ draw_dir() {
     ((y=_scroll_new_pos))
 }
 
-redraw() {
+redraw () {
     [[ $1 == full ]] && {
         read_dir
         scroll=0
@@ -380,7 +380,7 @@ refresh () {
     draw_dir
 }
 
-mark() {
+mark () {
     [[ ${list[0]} == empty && -z ${list[1]} ]] &&
         return
 
@@ -410,7 +410,7 @@ mark() {
     status_line
 }
 
-open() {
+open () {
     [[ -d "${1}"/ ]] && {
         search=
         search_end_early=
@@ -420,7 +420,7 @@ open() {
     }
 }
 
-cmd_line() {
+cmd_line () {
     cmd_reply=
 
     printf "\e7\e[%sH\e[?25h" "$LINES"
@@ -532,7 +532,7 @@ kill_music () {
         return
 
     # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
-    elif [[ $(awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
+    elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
         kill -CONT "$_mpg321_pid";\
             2>/dev/null 1>&2 killall -s SIGINT mpg321;\
             2>/dev/null 1>&2 killall -s SIGINT mpg321
@@ -560,7 +560,7 @@ next_song () {
     [[ -n "$_mpg321_pid" ]] && {
         if [[ "$_age" -ge "$_min_age" ]]; then
 
-            if [[ $(awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
+            if [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
                 kill -CONT "$_mpg321_pid"
                 IS_PAUSED=false
             fi
@@ -602,7 +602,7 @@ pause_or_play () {
 
     local _mpg321_status=
 
-    _mpg321_status=$(awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
+    _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
 
     # Elif process is running; stop
     if [[ $_mpg321_status == "S" ]]; then
@@ -991,7 +991,7 @@ toggle_hidden_files () {
     redraw full
 }
 
-key() {
+key () {
     case "${1}" in
 
         :) execute_command ;;
@@ -1068,7 +1068,7 @@ key() {
         # NOTE this will leave extra processes running
         # on exit.
         R)
-            kill -SIGTERM "$(awk 'NR==1{print}' "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
+            kill -SIGTERM "$(2>/dev/null awk 'NR==1{print}' "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
             ~/GitHub/shellaro/shellaro "$0" && exit
         ;;
 
@@ -1076,7 +1076,7 @@ key() {
     esac
 }
 
-get_args() {
+get_args () {
     while [[ "$1" ]]; do
         case "$1" in
             "-v"|"--version")
@@ -1103,7 +1103,7 @@ get_args() {
     done
 }
 
-shellaro_daemon() {
+shellaro_daemon () {
     # Infinite loop
     for ((;;)); {
         local _mpg321_pid=
@@ -1122,7 +1122,7 @@ shellaro_daemon() {
     }
 }
 
-main() {
+main () {
     ! [ "$(which mpg321)" ] && {
         echo "shellaro requires mpg321, is it installed?"
         exit 1
