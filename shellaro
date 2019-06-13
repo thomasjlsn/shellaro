@@ -295,13 +295,12 @@ format_line () {
         _format+="\\e[1;7m"
 
     # If the item is marked
-    [[ "${marked_files[$1]}" == "${list[$1]:-null}" ]] && {
+    [[ "${marked_files[$1]}" == "${list[$1]:-null}" ]] &&
         _format+="\\e[${COLOR_MARKED_BOLD};${COLOR_MARKED}m${ICON_MARKED} "
-    }
 
-    [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]] && {
+    # Current playing song
+    [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]] &&
         _format+="\\e[${fi:-${COLOR_CURRENT_SONG_BOLD};${COLOR_CURRENT_SONG}m}"
-    }
 
     # Escape the directory string
     _file_name="${_file_name//[^[:print:]]/^[}"
@@ -376,7 +375,8 @@ redraw () {
 refresh () {
     status_line
     clear_screen
-    status_line
+    # TODO seperate now playing info and status bar to fix tmux redraw issues
+#     status_line
     draw_dir
 }
 
@@ -1028,7 +1028,7 @@ key () {
         "") play_marked_songs ;;
 
         # " " SPACE key, clear selection
-        c) marked_files=(); redraw;;
+        c) marked_files=(); redraw; status_line;;
 
         p) pause_or_play ;;
 
@@ -1105,7 +1105,7 @@ get_args () {
 
 shellaro_daemon () {
     # Infinite loop
-    for ((;;)); {
+    while true; do
         local _mpg321_pid=
         local _status=
 
@@ -1119,7 +1119,7 @@ shellaro_daemon () {
         [[ -t 1 ]] || exit 1
 
         sleep 1
-    }
+    done
 }
 
 main () {
@@ -1208,8 +1208,8 @@ main () {
     # Run and cache PID for cleanup
     shellaro_daemon & echo $! > "${XDG_CACHE_HOME}/shellaro/daemon_pid"
 
-    # Infinite loop
-    for ((;;)); {
+    # Main loop
+    while true; do
         read "${read_flags[@]}" -srn 1 && key "$REPLY"
 
         # Exit if there is no longer a terminal attached
@@ -1217,7 +1217,7 @@ main () {
 
         # refresh the screen if music changes
         [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]] && refresh
-    }
+    done
 }
 
 main "$@"
