@@ -1022,15 +1022,14 @@ key () {
 
         f) find_current_song ;;
 
-        " ") mark_song_for_playlist ;;
+        " ") pause_or_play ;;
 
         # "" ENTER key
         "") play_marked_songs ;;
 
-        # " " SPACE key, clear selection
         c) marked_files=(); redraw; status_line;;
 
-        p) pause_or_play ;;
+        p) mark_song_for_playlist ;;
 
         n) next_song ;;
 
