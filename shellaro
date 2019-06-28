@@ -5,12 +5,9 @@
 #           shellaro - a terminal music player            #
 #         https://github.com/thomasjlsn/shellaro          #
 #                                                         #
-#                    inspired by fff                      #
-#           https://github.com/dylanaraps/fff             #
-#                                                         #
 ###########################################################
 
-VERSION="1.5.1"
+VERSION="1.6.0"
 
 # CONFIG
 #{{{
@@ -71,1152 +68,1109 @@ export INCREMENT_VOLUME=5
 
 # Error Logging
 export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
-error () { echo "[ERROR]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; }
-fatal () { echo "[FATAL]   $*" | tee -a "$ERROR_LOG_FILE" >&2 ; exit 1 ; }
 
-setup_tui () {
-    # escapes {{{
-    # '\e[?1049h': Use alternative screen buffer.
-    # '\e[?7l':    Disable line wrapping.
-    # '\e[?25l':   Hide the cursor.
-    # '\e[2J':     Clear the screen.
-    # '\e[1;Nr':   Limit scrolling to scrolling area.
-    #              Also sets cursor to (0,0). }}}
-    printf "\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr" "$max_items"
-
-    # Hide input
-    stty -echo
+error () {
+  echo "[ERROR]   $*" \
+    | tee -a "$ERROR_LOG_FILE" >&2
 }
 
-cleanup () {
-    # escapes {{{
-    # '\e[?7h':   Re-enable line wrapping.
-    # '\e[?25h':  Unhide the cursor.
-    # '\e[2J':    Clear the terminal.
-    # '\e[;r':    Set the scroll region to its default value.
-    #             Also sets cursor to (0,0).
-    # '\e[?1049l: Restore main screen buffer. }}}
-    printf "\e[?7h\e[?25h\e[2J\e[;r\e[?1049l"
-
-    set +o nolog
-    set +o pipefail
-    set +h
-
-    echo "" > "${XDG_CACHE_HOME}/shellaro/now_playing"
-    echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
-
-    # Show input
-    stty echo
-
-    2>/dev/null kill -SIGTERM \
-        "$(2>/dev/null awk 'NR==1{print}' \
-        "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
-
-    [[ "$DEBUG" == true ]] && {
-        set +x
-        DEBUG=false
-    }
-
-    exit 0
+fatal () {
+  echo "[FATAL]   $*" \
+    | tee -a "$ERROR_LOG_FILE" >&2
+  exit 1
 }
 
-clear_screen () {
-    # escapes {{{
-    # '\e[%sH':    Move cursor to bottom of scroll area.
-    # '\e[9999C':  Move cursor to right edge of the terminal.
-    # '\e[1J':     Clear screen to top left corner (from cursor up).
-    # '\e[2J':     Clear screen fully (if using tmux) (fixes clear issues).
-    # '\e[1;%sr':  Clearing the screen resets the scroll region(?). Re-set it.
-    #              Also sets cursor to (0,0). }}}
-#    printf "\e[%sH\e[9999C\e[1J%b\e[1;%sr" \
-#           "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
-    printf "\e[%sH\e[9999C\e[1J\e[1;%sr" \
-           "$((LINES-2))" "$max_items"
-}
+get_args () {
+  while [[ "$1" ]]; do
+    case "$1" in
+      "-v"|"--version")
+        printf "shellaro %s\n" "$VERSION"
+        exit
+      ;;
 
-get_term_size () {
-    #read -r LINES COLUMNS < <(stty size)
-    shopt -s checkwinsize; (:;:)
+      "-d"|"--debug")
+        [ "$2" ] && {
+          case "$2" in
+            "x")
+              strace -qqfe execve ~/GitHub/shellaro/shellaro "$0"
+              exit
+            ;;
+          esac
+        }
 
-    # Max list items that fit in the scroll area
-    # Leave 2 lines at the bottom for status & cmd line
-    ((max_items=LINES-2))
+        set -x
+        DEBUG=true
+      ;;
+
+    esac
+    shift
+  done
 }
 
 set_initial_status () {
-    local _mpg321_pid=
+  local _mpg321_pid
+  local _mpg321_status
 
-    _mpg321_pid="$(pgrep mpg321)"
+  _mpg321_pid="$(pgrep mpg321)"
 
-    [ -n "$_mpg321_pid" ] && {
-        if [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "S" ]]; then
-            IS_PAUSED=false
-        elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
-            IS_PAUSED=true
-        fi
+  [ -n "$_mpg321_pid" ] && {
+    _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
 
-        [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] && {
-            IS_MUTED=true
-        }|| IS_MUTED=false
-    }
+    case $_mpg321_status in
+      "S") IS_PAUSED=false ;;
+      "T") IS_PAUSED=true ;;
+    esac
+  }
 
-    STARTED=$(date +%s%3N)
-}
+  [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] && {
+    IS_MUTED=true
+  } || IS_MUTED=false
 
-status_line () {
-    local _mark_ui=
-    local _color=
-    local _icon=
-    local _volume=
-    local _current_song_path
-    local _mpg321_pid=
-
-    _mpg321_pid=$(pgrep mpg321)
-    _current_song_path=$(readlink -f "/proc/${_mpg321_pid}/fd/3")
-
-    NOW_PLAYING=$(echo "$_current_song_path" \
-        | awk -F "/" '{print $NF}')
-
-    FG_STATUS=$(echo "$_current_song_path" \
-        | tr -cd "[:alnum:]")
-
-    [[ "$NOW_PLAYING" == *pipe:[* ]] && {
-        kill_music
-        NOW_PLAYING=""
-        fatal "readlink has failed"
-    }
-
-    if [[ "$IS_PAUSED" == true ]]; then
-        _icon="$ICON_PAUSED"
-        _color="$COLOR_PAUSED"
-    else
-        _icon="$ICON_PLAYING"
-        _color="$COLOR_PLAYING"
-    fi
-
-    if [[ "${IS_MUTED}" == true ]]; then
-        _volume="$ICON_MUTED"
-        _color="$COLOR_MUTED"
-    else
-        _volume="$(amixer -D pulse get Master \
-            | awk '/Left:/' \
-            | awk -F '[\[\]]' '{print $2"  "}' \
-            | cut -c 1-4 \
-            || error "volume pipe has failed")"
-    fi
-
-    if [ -n "$_mpg321_pid" ]; then
-        _icon="$_icon"
-        _color="$_color"
-    else
-        _icon="$ICON_STOPPED"
-        _color="$COLOR_STOPPED"
-    fi
-
-    _mark_ui="[${#marked_files[@]}]"
-    format_status_line="${_icon} ${_volume}${marked_files[*]:+${_mark_ui}} ${NOW_PLAYING}"
-
-    # escapes {{{
-    # '\e7':       Save cursor position.
-    #              This is more widely supported than '\e[s'.
-    # '\e[%sH':    Move cursor to bottom of the terminal.
-    # '\e[30;41m': Set foreground and background colors.
-    # '%*s':       Insert enough spaces to fill the screen width.
-    #              This sets the background color to the whole line
-    #              and fixes issues in 'screen' where '\e[K' doesn't work.
-    # '\r':        Move cursor back to column 0 (was at EOL due to above).
-    # '\e[m':      Reset text formatting.
-    # '\e[H\e[K':  Clear line below status_line.
-    # '\e8':       Restore cursor position.
-    #              This is more widely supported than '\e[u'. }}}
-    printf "\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8" \
-           "$((LINES-1))" \
-           "${_color}" \
-           "${format_status_line:-/}"
+  STARTED=$(date +%s%3N)
 }
 
 read_dir () {
-    local _dirs=()
-    local _files=()
-    local _item_index
+  local _dirs=()
+  local _files=()
+  local _item_index
 
-    for item in "${PWD}/"*; do
-        if [[ -d $item ]]; then
-            _dirs+=("$item")
-            ((_item_index++))
+  for item in "${PWD}/"*; do
+    if [[ -d $item ]]; then
+      _dirs+=("$item")
+      ((_item_index++))
 
-            [ "$item" == "$OLDPWD" ] &&
-                ((previous_index=_item_index))
-        else
-            _files+=("$item")
-        fi
-    done
+      [ "$item" == "$OLDPWD" ] &&
+        ((previous_index=_item_index))
+    else
+      _files+=("$item")
+    fi
+  done
 
-    list=("${_dirs[@]}" "${_files[@]}")
+  list=("${_dirs[@]}" "${_files[@]}")
 
-    [[ -z ${list[0]} ]] &&
-        list[0]="empty"
+  [[ -z ${list[0]} ]] &&
+    list[0]="empty"
 
-    ((list_total=${#list[@]}-1))
+  ((list_total=${#list[@]}-1))
 
-    # Save the original dir in a second list as a backup
-    cur_list=("${list[@]}")
+  # Save the original dir in a second list as a backup
+  cur_list=("${list[@]}")
 }
 
 format_line () {
-    local _file_name=
-    local _format
-    local _suffix
+  local _file_name
+  local _format
+  local _suffix
 
-    _file_name="${list[$1]##*/}"
+  _file_name="${list[$1]##*/}"
 
-    # If the dir is empty, return
-    if [[ -z "${list[$1]}" ]]; then
-        return
+  # If the dir is empty, return
+  if [[ -z "${list[$1]}" ]]; then
+    return
 
-    elif [[ -d "${list[$1]}" ]]; then
-        _format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
-        _suffix+='/'
+  elif [[ -d "${list[$1]}" ]]; then
+    _format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
+    _suffix+='/'
 
-    elif [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]]; then
-        _suffix+='♫ '
+  elif [[ "${list[$1]}" == *"$NOW_PLAYING" ]]; then
+    _suffix+='♫ '
 
-    else
-        _format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
-    fi
+  else
+    _format+="\\e[${fi:-${COLOR_OTHER_BOLD};${COLOR_OTHER}}m"
+  fi
 
-    _suffix+="                                                               \
-                                                                             \
-                                                                             \
-                                                                             "
+  _suffix+="                                                               \
+                                                                           \
+                                                                           \
+                                                                           "
 
-    # If the item is under the cursor
-    (($1 == scroll)) &&
-        _format+="\\e[1;7m"
+  # If the item is under the cursor
+  (($1 == scroll)) &&
+    _format+="\\e[1;7m"
 
-    # If the item is marked
-    [[ "${marked_files[$1]}" == "${list[$1]:-null}" ]] &&
-        _format+="\\e[${COLOR_MARKED_BOLD};${COLOR_MARKED}m${ICON_MARKED} "
+  # If the item is marked
+  [[ "${marked_files[$1]}" == "${list[$1]:-null}" ]] &&
+    _format+="\\e[${COLOR_MARKED_BOLD};${COLOR_MARKED}m${ICON_MARKED} "
 
-    # Current playing song
-    [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]] &&
-        _format+="\\e[${fi:-${COLOR_CURRENT_SONG_BOLD};${COLOR_CURRENT_SONG}m}"
+  # Current playing song
+  [[ "${list[$1]}" == *"$NOW_PLAYING" ]] && [[ "$NOW_PLAYING" == *".mp3" ]] &&
+    _format+="\\e[${fi:-${COLOR_CURRENT_SONG_BOLD};${COLOR_CURRENT_SONG}m}"
 
-    # Escape the directory string
-    _file_name="${_file_name//[^[:print:]]/^[}"
+  # Escape the directory string
+  _file_name="${_file_name//[^[:print:]]/^[}"
 
-    printf "\r%b%s\e[m\r" "${_format}" "${_file_name}${_suffix}"
+  printf "\r%b%s\e[m\r" "${_format}" "${_file_name}${_suffix}"
 }
 
-draw_dir () {
-    # Print the max directory items that fit in the scroll area
-    local _scroll_start=
-    local _scroll_new_pos=
-    local _scroll_end=
+get_term_size () {
+  #read -r LINES COLUMNS < <(stty size)
+  shopt -s checkwinsize; (:;:)
 
-    _scroll_start="$scroll"
-
-    # When going up the directory tree, place the cursor on the position
-    # of the previous directory
-    ((find_previous == 1)) && {
-        ((_scroll_start=previous_index-1))
-        ((scroll=_scroll_start))
-
-        find_previous=
-    }
-
-    # If current dir is near the top of the list, keep scroll position
-    if ((list_total < max_items || scroll < max_items/2)); then
-        ((_scroll_start=0))
-        ((_scroll_end=max_items))
-        ((_scroll_new_pos=scroll + 1))
-
-    # If curent dir is near the end of the list, keep scroll position
-    elif ((list_total - scroll < max_items/2)); then
-        ((_scroll_start=list_total - max_items + 1))
-        ((_scroll_new_pos=max_items - (list_total-scroll)))
-        ((_scroll_end=list_total+1))
-
-    # If current dir is somewhere in the middle, center scroll position
-    else
-        ((_scroll_start=scroll-max_items/2))
-        ((_scroll_end=_scroll_start+max_items))
-        ((_scroll_new_pos=max_items/2+1))
-    fi
-
-    # Reset cursor position
-    printf "\e[H"
-
-    for ((i=_scroll_start;i<_scroll_end;i++)); {
-        # Don't print one too many newlines
-        ((i > _scroll_start)) &&
-            printf '\n'
-
-        format_line "${i}"
-    }
-
-    # Move the cursor to its new position if it changed
-    printf "\e[%sH" "${_scroll_new_pos}"
-    ((y=_scroll_new_pos))
+  # Max list items that fit in the scroll area
+  # Leave 2 lines at the bottom for status & cmd line
+  ((max_items=LINES-2))
 }
 
-redraw () {
-    [[ $1 == full ]] && {
-        read_dir
-        scroll=0
-    }
+setup_terminal () {
+  # escapes {{{
+  # '\e[?1049h': Use alternative screen buffer.
+  # '\e[?7l':    Disable line wrapping.
+  # '\e[?25l':   Hide the cursor.
+  # '\e[2J':     Clear the screen.
+  # '\e[1;Nr':   Limit scrolling to scrolling area.
+  #              Also sets cursor to (0,0). }}}
+  printf "\e[?1049h\e[?7l\e[?25l\e[2J\e[1;%sr" "$max_items"
 
-    #status_line
-    clear_screen
-#    status_line
-    draw_dir
+  # Hide input
+  stty -echo
 }
 
-refresh () {
-    status_line
-    clear_screen
-    # TODO seperate now playing info and status bar to fix tmux redraw issues
-#     status_line
-    draw_dir
+draw_screen () {
+  # Print the max directory items that fit in the scroll area
+  local _scroll_start
+  local _scroll_new_pos
+  local _scroll_end
+
+  _scroll_start="$scroll"
+
+  # When going up the directory tree, place the cursor on the position
+  # of the previous directory
+  ((find_previous == 1)) && {
+    ((_scroll_start=previous_index-1))
+    ((scroll=_scroll_start))
+
+    find_previous=
+  }
+
+  # If current dir is near the top of the list, keep scroll position
+  if ((list_total < max_items || scroll < max_items/2)); then
+    ((_scroll_start=0))
+    ((_scroll_end=max_items))
+    ((_scroll_new_pos=scroll + 1))
+
+  # If curent dir is near the end of the list, keep scroll position
+  elif ((list_total - scroll < max_items/2)); then
+    ((_scroll_start=list_total - max_items + 1))
+    ((_scroll_new_pos=max_items - (list_total-scroll)))
+    ((_scroll_end=list_total+1))
+
+  # If current dir is somewhere in the middle, center scroll position
+  else
+    ((_scroll_start=scroll-max_items/2))
+    ((_scroll_end=_scroll_start+max_items))
+    ((_scroll_new_pos=max_items/2+1))
+  fi
+
+  # Reset cursor position
+  printf "\e[H"
+
+  for ((i=_scroll_start;i<_scroll_end;i++)); {
+    # Don't print one too many newlines
+    ((i > _scroll_start)) &&
+      printf '\n'
+
+    format_line "${i}"
+  }
+
+  # Move the cursor to its new position if it changed
+  printf "\e[%sH" "${_scroll_new_pos}"
+  ((y=_scroll_new_pos))
 }
 
-mark () {
-    [[ ${list[0]} == empty && -z ${list[1]} ]] &&
-        return
-
-    if [[ $1 == all ]]; then
-        if ((${#marked_files[@]} != ${#list[@]})); then
-            marked_files=("${list[@]}")
-            export mark_dir="$PWD"
-        else
-            marked_files=()
-        fi
-
-        redraw
-    else
-        if [[ ${marked_files[$1]} == "${list[$1]}" ]]; then
-            unset 'marked_files[scroll]'
-
-        else
-            marked_files[$1]="${list[$1]}"
-            export mark_dir="$PWD"
-        fi
-
-        # Clear line before changing it
-        printf "\e[K"
-        format_line "$1"
-    fi
-
-    status_line
-}
-
-open () {
-    [[ -d "${1}"/ ]] && {
-        search=
-        search_end_early=
-        export previous_dir="$PWD"
-        cd "${1:-/}" ||:
-        redraw full
-    }
-}
-
-cmd_line () {
-    cmd_reply=
-
-    printf "\e7\e[%sH\e[?25h" "$LINES"
-
-    while IFS= read -rsn 1 -p $'\r\e[K'"${1}${cmd_reply}" read_reply; do
-        case "$read_reply" in
-            # Backspace
-            $'\177'|$'\b')
-                cmd_reply="${cmd_reply%?}"
-
-                # Clear tab-completion
-                unset comp c
-            ;;
-
-            # Tab
-            $'\t')
-                comp_glob="${cmd_reply}*"
-
-                # Pass the argument dirs to limit completion to directories
-                [[ $2 == dirs ]] &&
-                    comp_glob="${cmd_reply*/}"
-
-                # Generate a completion list once
-                [[ -z ${comp[0]} ]] &&
-                    IFS=$'\n' read -d "" -ra comp < <(compgen -G "${comp_glob}")
-
-                # On each tab press, cycle through the completion list
-                [[ -n ${comp[c]} ]] && {
-                    cmd_reply="${comp[c]}"
-                    ((c=c >= ${#comp[@]}-1 ? 0 : ++c))
-                }
-            ;;
-
-            # Escape / Custom 'no' value (used as a replacement for '-n 1')
-            $'\e'|"${3:-null}")
-                cmd_reply=
-                break
-            ;;
-
-            # Enter/Return
-            "")
-                # If there's only one search result and its a directory,
-                # enter it on one enter keypress
-                [[ $2 == search && -d ${list[0]} ]] && ((list_total == 0)) && {
-                    # '\e[?25l': Hide the cursor
-                    printf "\e[?25l"
-
-                    open "${list[0]}"
-                    search_end_early=1
-
-                    # Unset tab completion variables since we're done
-                    unset comp c
-                    return
-                }
-
-                break
-            ;;
-
-            # Custom 'yes' value (used as a replacement for '-n 1')
-            "${2:-null}")
-                cmd_reply="$read_reply"
-                break
-            ;;
-
-            # Anything else, add it to read reply
-            " "|*)
-                cmd_reply+="$read_reply"
-
-                # Clear tab-completion
-                unset comp c
-            ;;
-        esac
-
-        # Search on keypress if search passed as an argument
-        [[ $2 == search ]] && {
-            # '\e[?25l': Hide the cursor
-            printf "\e[?25l"
-
-            # Use a greedy glob to search
-            list=("${PWD}"/*"${cmd_reply}"*)
-            ((list_total=${#list[@]}-1))
-
-            # Draw the search results on screen
-            scroll=0
-            redraw
-
-            # '\e[%sH':  Move cursor back to cmd-line
-            # '\e[?25h': Unhide the cursor
-            printf "\e[%sH\e[?25h" "$LINES"
-        }
-    done
-
-    # Unset tab completion
-    unset comp c
-
-    # '\e[2K':   Clear the entire cmd_line on finish.
-    # '\e[?25l': Hide the cursor.
-    # '\e8':     Restore cursor position.
-    printf "\e[2K\e[?25l\e8"
+clear_screen () {
+  # escapes {{{
+  # '\e[%sH':    Move cursor to bottom of scroll area.
+  # '\e[9999C':  Move cursor to right edge of the terminal.
+  # '\e[1J':     Clear screen to top left corner (from cursor up).
+  # '\e[2J':     Clear screen fully (if using tmux) (fixes clear issues).
+  # '\e[1;%sr':  Clearing the screen resets the scroll region(?). Re-set it.
+  #              Also sets cursor to (0,0). }}}
+  # printf "\e[%sH\e[9999C\e[1J%b\e[1;%sr" \
+  #   "$((LINES-2))" "${TMUX:+\e[2J}" "$max_items"
+  printf "\e[%sH\e[9999C\e[1J\e[1;%sr" \
+    "$((LINES-2))" "$max_items"
 }
 
 kill_music () {
-    local _mpg321_pid=
+  local _mpg321_pid
 
-    _mpg321_pid="$(pgrep mpg321)"
+  _mpg321_pid="$(pgrep mpg321)"
 
-    # Do nothing if mpg321 is not running
-    if [ -z "$_mpg321_pid" ]; then
-        return
+  # Do nothing if mpg321 is not running
+  if [ -z "$_mpg321_pid" ]; then
+    return
 
-    # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
-    elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
-        kill -CONT "$_mpg321_pid";\
-            2>/dev/null 1>&2 killall -s SIGINT mpg321;\
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
+  # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
+  elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
+    kill -CONT "$_mpg321_pid";\
+      2>/dev/null 1>&2 killall -s SIGINT mpg321;\
+      2>/dev/null 1>&2 killall -s SIGINT mpg321
 
-    elif [ -n "$_mpg321_pid" ]; then
-        2>/dev/null 1>&2 killall -s SIGINT mpg321;\
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
+  elif [ -n "$_mpg321_pid" ]; then
+    2>/dev/null 1>&2 killall -s SIGINT mpg321;\
+      2>/dev/null 1>&2 killall -s SIGINT mpg321
+  fi
+}
+
+status_line () {
+  local _mark_ui
+  local _color
+  local _icon
+  local _volume
+  local _current_song_path
+  local _mpg321_pid
+
+  _mpg321_pid=$(pgrep mpg321)
+  _current_song_path=$(readlink -f "/proc/${_mpg321_pid}/fd/3")
+
+  NOW_PLAYING=$(echo "$_current_song_path" \
+    | awk -F "/" '{print $NF}')
+
+  FG_STATUS=$(echo "$_current_song_path" \
+    | tr -cd "[:alnum:]")
+
+  [[ "$NOW_PLAYING" == *pipe:[* ]] && {
+    kill_music
+    NOW_PLAYING=""
+    fatal "readlink has failed"
+  }
+
+  if [[ "$IS_PAUSED" == true ]]; then
+    _icon="$ICON_PAUSED"
+    _color="$COLOR_PAUSED"
+  else
+    _icon="$ICON_PLAYING"
+    _color="$COLOR_PLAYING"
+  fi
+
+  if [[ "${IS_MUTED}" == true ]]; then
+    _volume="$ICON_MUTED"
+    _color="$COLOR_MUTED"
+  else
+    _volume="$(amixer -D pulse get Master \
+      | awk '/Left:/' \
+      | awk -F '[\[\]]' '{print $2"  "}' \
+      | cut -c 1-4 \
+      || error "volume pipe has failed")"
+  fi
+
+  if [ -n "$_mpg321_pid" ]; then
+    _icon="$_icon"
+    _color="$_color"
+  else
+    _icon="$ICON_STOPPED"
+    _color="$COLOR_STOPPED"
+  fi
+
+  _mark_ui="[${#marked_files[@]}]"
+  format_status_line="${_icon} ${_volume}${marked_files[*]:+${_mark_ui}} ${NOW_PLAYING}"
+
+  # escapes {{{
+  # '\e7':       Save cursor position.
+  #              This is more widely supported than '\e[s'.
+  # '\e[%sH':    Move cursor to bottom of the terminal.
+  # '\e[30;41m': Set foreground and background colors.
+  # '%*s':       Insert enough spaces to fill the screen width.
+  #              This sets the background color to the whole line
+  #              and fixes issues in 'screen' where '\e[K' doesn't work.
+  # '\r':        Move cursor back to column 0 (was at EOL due to above).
+  # '\e[m':      Reset text formatting.
+  # '\e[H\e[K':  Clear line below status_line.
+  # '\e8':       Restore cursor position.
+  #              This is more widely supported than '\e[u'. }}}
+  printf "\e7\e[?6l\e[%sH\e[30;%sm %s\e[K\e[m\n\e[K\e[?6h\e8" \
+    "$((LINES-1))" \
+    "${_color}" \
+    "${format_status_line:-/}"
+}
+
+redraw () {
+  clear_screen
+
+  [ "$1" == full ] && {
+    read_dir
+    scroll=0
+  }
+
+  draw_screen
+}
+
+refresh () {
+  status_line
+  clear_screen
+  # TODO seperate now playing info and status bar to fix tmux redraw issues
+  # status_line
+  draw_screen
+}
+
+cmd_line () {
+  cmd_reply=
+
+  printf "\e7\e[%sH\e[?25h" "$LINES"
+
+  while IFS= read -rsn 1 -p $'\r\e[K'"${1}${cmd_reply}" read_reply; do
+    case "$read_reply" in
+      # Backspace
+      $'\177'|$'\b')
+        cmd_reply="${cmd_reply%?}"
+
+        # Clear tab-completion
+        unset comp c
+      ;;
+
+      # Tab
+      $'\t')
+        comp_glob="${cmd_reply}*"
+
+        # Pass the argument dirs to limit completion to directories
+        [[ $2 == dirs ]] &&
+            comp_glob="${cmd_reply*/}"
+
+        # Generate a completion list once
+        [[ -z ${comp[0]} ]] &&
+            IFS=$'\n' read -d "" -ra comp < <(compgen -G "${comp_glob}")
+
+        # On each tab press, cycle through the completion list
+        [[ -n ${comp[c]} ]] && {
+            cmd_reply="${comp[c]}"
+            ((c=c >= ${#comp[@]}-1 ? 0 : ++c))
+        }
+      ;;
+
+      # Escape / Custom 'no' value (used as a replacement for '-n 1')
+      $'\e'|"${3:-null}")
+        cmd_reply=
+        break
+      ;;
+
+      # Enter/Return
+      "")
+        # If there's only one search result and its a directory,
+        # enter it on one enter keypress
+        [[ $2 == search && -d ${list[0]} ]] && ((list_total == 0)) && {
+          # '\e[?25l': Hide the cursor
+          printf "\e[?25l"
+
+          open "${list[0]}"
+          search_end_early=1
+
+          # Unset tab completion variables since we're done
+          unset comp c
+          return
+        }
+
+        break
+      ;;
+
+      # Custom 'yes' value (used as a replacement for '-n 1')
+      "${2:-null}")
+        cmd_reply="$read_reply"
+        break
+      ;;
+
+      # Anything else, add it to read reply
+      " "|*)
+        cmd_reply+="$read_reply"
+
+        # Clear tab-completion
+        unset comp c
+      ;;
+    esac
+
+    # Search on keypress if search passed as an argument
+    [[ $2 == search ]] && {
+      # '\e[?25l': Hide the cursor
+      printf "\e[?25l"
+
+      # Use a greedy glob to search
+      list=("${PWD}"/*"${cmd_reply}"*)
+      ((list_total=${#list[@]}-1))
+
+      # Draw the search results on screen
+      scroll=0
+      redraw
+
+      # '\e[%sH':  Move cursor back to cmd-line
+      # '\e[?25h': Unhide the cursor
+      printf "\e[%sH\e[?25h" "$LINES"
+    }
+  done
+
+  # Unset tab completion
+  unset comp c
+
+  # '\e[2K':   Clear the entire cmd_line on finish.
+  # '\e[?25l': Hide the cursor.
+  # '\e8':     Restore cursor position.
+  printf "\e[2K\e[?25l\e8"
+}
+
+open () {
+  [ -d "${1}"/ ] && {
+    search=
+    search_end_early=
+    export previous_dir="$PWD"
+    cd "${1:-/}" ||:
+    redraw full
+  }
+}
+
+mark () {
+  [[ ${list[0]} == empty && -z ${list[1]} ]] &&
+    return
+
+  if [[ $1 == all ]]; then
+    if ((${#marked_files[@]} != ${#list[@]})); then
+      marked_files=("${list[@]}")
+      export mark_dir="$PWD"
+    else
+      marked_files=()
     fi
+
+    redraw
+
+  else
+    if [[ ${marked_files[$1]} == "${list[$1]}" ]]; then
+      unset 'marked_files[scroll]'
+    else
+      marked_files[$1]="${list[$1]}"
+      export mark_dir="$PWD"
+    fi
+
+    # Clear line before changing it
+    printf "\e[K"
+    format_line "$1"
+  fi
+
+  status_line
 }
 
 next_song () {
-    local _min_age=
-    local _keypress=
-    local _age=
-    local _mpg321_pid=
+  local _mpg321_pid
+  local _min_age
+  local _keypress
+  local _age
 
-    _mpg321_pid=$(pgrep mpg321)
-    _min_age=1050 # milliseconds
-    _keypress=$(date +%s%3N)
+  _mpg321_pid=$(pgrep mpg321)
+  _min_age=1050 # milliseconds
+  _keypress=$(date +%s%3N)
+  _age="((${_keypress}-${STARTED}))"
 
-    _age="((${_keypress}-${STARTED}))"
-
+  [ -n "$_mpg321_pid" ] && {
     # Don't allow the user to skip to the next song within the first second,
     # otherwise mpg321 is killed
-    [[ -n "$_mpg321_pid" ]] && {
-        if [[ "$_age" -ge "$_min_age" ]]; then
+    [[ "$_age" -ge "$_min_age" ]] && {
+      [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]] && {
+        kill -CONT "$_mpg321_pid"
+        IS_PAUSED=false
+      }
 
-            if [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
-                kill -CONT "$_mpg321_pid"
-                IS_PAUSED=false
-            fi
+      # A single SIGINT (ctrl-c) to mpg321 goes to the next song
+      2>/dev/null 1>&2 killall -s SIGINT mpg321
+      STARTED=$(date +%s%3N)
 
-            # A single SIGINT (ctrl-c) to mpg321 goes to the next song
-            2>/dev/null 1>&2 killall -s SIGINT mpg321
-            STARTED=$(date +%s%3N)
-
-            refresh
-        else
-            return
-        fi
+      refresh
     }
+  }
 }
 
 pause_or_play () {
-    local _mpg321_pid=
+  local _mpg321_pid
 
-    _mpg321_pid=$(pgrep mpg321)
+  _mpg321_pid=$(pgrep mpg321)
 
-    # If mpg321 is not running, play
-    if [ -z "$_mpg321_pid" ]; then
-        # If list item is a dir, play all in dir
-        if [[ -d ${list[scroll]} ]]; then
-            2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
-        elif [[ ${list[scroll]} == *.mp3 ]]; then
-            2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-        elif [[ ${list[scroll]} == *.list ]]; then
-            2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &
-        elif [[ ${list[scroll]} == */ALL ]]; then
-            2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &
-        fi
-
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-        refresh; return
+  # If mpg321 is not running, play
+  [ -z "$_mpg321_pid" ] && {
+    # If list item is a dir, play all in dir
+    if [ -d ${list[scroll]} ]; then
+      2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
+    else
+      case "${list[scroll]}" in
+        *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
+        *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
+        */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+      esac
     fi
 
+    IS_PAUSED=false
+    STARTED=$(date +%s%3N)
+    refresh
+    return
+  }
 
-    local _mpg321_status=
+  local _mpg321_status
 
-    _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
+  _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
 
-    # Elif process is running; stop
-    if [[ $_mpg321_status == "S" ]]; then
-        kill -STOP "$_mpg321_pid"
-        IS_PAUSED=true
-        status_line; return
+  case $_mpg321_status in
+    "S")
+      kill -STOP "$_mpg321_pid"
+      IS_PAUSED=true
+    ;;
+    "T")
+      kill -CONT "$_mpg321_pid"
+      IS_PAUSED=false
+      STARTED=$(date +%s%3N)
+    ;;
+  esac
 
-    # Elif stopped; resume
-    elif [[ $_mpg321_status == "T" ]]; then
-        kill -CONT "$_mpg321_pid"
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-        status_line; return
-    fi
+  status_line
+}
+
+shuffle_all () {
+  kill_music
+  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &
+
+  IS_PAUSED=false
+  STARTED=$(date +%s%3N)
+
+  refresh
 }
 
 play_all_in_dir () {
-    kill_music
+  kill_music
 
-    if [[ -d ${list[scroll]} ]]; then
-        2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
-    elif [[ ${list[scroll]} == *.mp3 ]]; then
-        2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &
-    elif [[ ${list[scroll]} == *.list ]]; then
-        2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &
-    elif [[ ${list[scroll]} == */ALL ]]; then
-        2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &
-    fi
+  if [[ -d ${list[scroll]} ]]; then
+    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
+  else
+    case "${list[scroll]}" in
+      *.mp3)  2>/dev/null 1>&2 mpg321 ./*.mp3 & ;;
+      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
+      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+    esac
+  fi
 
-    IS_PAUSED=false
-    STARTED=$(date +%s%3N)
+  IS_PAUSED=false
+  STARTED=$(date +%s%3N)
 
-    refresh
+  refresh
 }
 
 shuffle_all_in_dir () {
-    kill_music
+  kill_music
 
-    if [[ -d ${list[scroll]} ]]; then
-        2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
-    elif [[ ${list[scroll]} == *.mp3 ]]; then
-        2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle &
-    elif [[ ${list[scroll]} == *.list ]]; then
-        2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &
-    elif [[ ${list[scroll]} == */ALL ]]; then
-        2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &
-    fi
+  if [[ -d ${list[scroll]} ]]; then
+    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
+  else
+    case "${list[scroll]}" in
+      *.mp3) 2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle & ;;
+      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
+      */ALL) 2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle & ;;
+    esac
+  fi
 
-    IS_PAUSED=false
-    STARTED=$(date +%s%3N)
+  IS_PAUSED=false
+  STARTED=$(date +%s%3N)
 
-    #refresh
+  refresh
 }
 
 mark_song_for_playlist () {
-    # Don't mark dirs
-    if [[ -d ${list[scroll]} ]]; then
-        :
-    else
-        mark "$scroll"
-    fi
+  # Don't mark dirs
+  [ -d ${list[scroll]} ] ||
+    mark "$scroll"
 
-    # Scroll down one item
-    ((scroll < list_total)) && {
-        ((scroll++))
-        ((y < max_items )) && ((y++))
+  # Scroll down one item
+  ((scroll < list_total)) && {
+    ((scroll++))
+    ((y < max_items )) && ((y++))
 
-        format_line "$((scroll-1))"
-        printf "\n"
-        format_line "$scroll"
-        status_line
-    }
+    format_line "$((scroll-1))"
+    printf "\n"
+    format_line "$scroll"
+    status_line
+  }
 }
 
 play_marked_songs () {
-    if [[ -d ${list[scroll]} ]]; then
-        open "${list[scroll]}"
-        return
-    fi
+  [ -d ${list[scroll]} ] && {
+    open "${list[scroll]}"
+    return
+  }
 
-    kill_music
+  kill_music
 
-    if ((${#marked_files[@]} != 0)); then
-        playlist_file="${XDG_CACHE_HOME}/shellaro/playlist"
-        # Save marked files to a file and open them for editing
-        printf "%s\n" "${marked_files[@]}" > "$playlist_file"
+  if ((${#marked_files[@]} != 0)); then
+    playlist_file="${XDG_CACHE_HOME}/shellaro/playlist"
+    printf "%s\n" "${marked_files[@]}" > "$playlist_file"
+    2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
+    marked_files=()
+  else
+    case "${list[scroll]}" in
+      *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
+      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
+      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+    esac
+  fi
 
-        2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
-        marked_files=()
 
-    elif [[ ${list[scroll]} == *.mp3 ]]; then
-        2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-    elif [[ ${list[scroll]} == *.list ]]; then
-        2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" &
-    elif [[ ${list[scroll]} == */ALL ]]; then
-        2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B &
-    fi
-
-    IS_PAUSED=false
-    STARTED=$(date +%s%3N)
-    refresh
+  IS_PAUSED=false
+  STARTED=$(date +%s%3N)
+  refresh
 }
 
 # TODO better playlists, this is just a quick solution to get it working
 add_marked_to_playlist () {
-    local _custom_playlist=
+  local _custom_playlist
 
-    if ((${#marked_files[@]} != 0)); then
-        cmd_line "add to: "
-        _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
-        # Save marked files to a file and open them for editing
-        printf "%s\n" "${marked_files[@]}" >> "$_custom_playlist"
+  ((${#marked_files[@]} != 0)) && {
+    cmd_line "add to: "
+    _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
+    # Save marked files to a file and open them for editing
+    printf "%s\n" "${marked_files[@]}" >> "$_custom_playlist"
 
-        marked_files=()
-        redraw
-    fi
+    marked_files=()
+    redraw
+  }
 }
 
 delete_playlist () {
-    local _custom_playlist=
+  local _custom_playlist
 
-    cmd_line "delete playlist: "
+  cmd_line "delete playlist: "
 
-    _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
+  _custom_playlist="${XDG_MUSIC_DIR}/.playlists/${cmd_reply}.list"
 
-    if [[ -f "$_custom_playlist" ]] && [[ "$PWD" == "${XDG_MUSIC_DIR}"/.playlists ]]; then
-        rm "$_custom_playlist"
-        redraw full; return
-    elif [[ -f "$_custom_playlist" ]]; then
-        rm "$_custom_playlist"
-    fi
+  if [ -f "$_custom_playlist" ] && [[ "$PWD" == "${XDG_MUSIC_DIR}"/.playlists ]]; then
+    rm "$_custom_playlist"
+    redraw full
+    return
+  elif [ -f "$_custom_playlist" ]; then
+    rm "$_custom_playlist"
+  fi
 
-    redraw
+  redraw
 }
 
 find_current_song () {
-    local _mpg321_pid=
+  local _mpg321_pid
 
-    _mpg321_pid=$(pgrep mpg321)
+  _mpg321_pid=$(pgrep mpg321)
 
-    # If mpg231 is not running, don't search
-    [[ -z "$_mpg321_pid" ]] &&
-        return
+  # If mpg231 is not running, don't search
+  [ -z "$_mpg321_pid" ] &&
+    return
 
-    open "$(locate "$(readlink -f /proc/"$_mpg321_pid"/fd/3  \
-        | awk -F "/" '{print $NF}')" \
-        | awk -F "/" '{$NF=""; print $0}' \
-        | sed s/' '/'\/'/g)" || exit 1
+  open "$(locate "$(readlink -e /proc/"$_mpg321_pid"/fd/3  \
+    | awk -F "/" '{print $NF}')" \
+    | awk -F "/" '{$NF=""; print $0}' \
+    | sed s/' '/'\/'/g)" || exit 1
 
-    for i in {1..1000}; do
-        if [[ "${list[scroll]}" == *"$NOW_PLAYING" ]]; then
-            return
-        else
-            scroll_down
-        fi
-    done
+  for i in {1..1000}; do
+    if [[ "${list[scroll]}" == *"$NOW_PLAYING" ]]; then
+      return
+    else
+      scroll_down
+    fi
+  done
 }
 
 find_and_play () {
-    cmd_line "locate: "
+  cmd_line "locate: "
 
-    if [[ -n "$cmd_reply" ]]; then
-        local _search_result=
+  [ -n "$cmd_reply" ] && {
+    local _search_result
 
-        set_status () {
-            IS_PAUSED=false
-            STARTED=$(date +%s%3N)
+    set_status () {
+      IS_PAUSED=false
+      STARTED=$(date +%s%3N)
+    }
+
+    _search_result="$(locate -iqt "$cmd_reply" | sed q)"
+
+    [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]] && {
+      if [[ -d "$_search_result" ]];then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
+        set_status
+
+      elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
+        kill_music
+        2>/dev/null 1>&2 mpg321 "$_search_result" &
+        set_status
+
+      elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
+        playlist_file="$_search_result"
+
+        kill_music
+        2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
+        set_status
+
+      else
+        _search_result="$(locate -qt "$cmd_reply" | sed q)"
+
+        [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]] && {
+          if [[ -d $_search_result ]]; then
+            kill_music
+            2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
+            set_status
+
+          elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
+            kill_music
+            2>/dev/null 1>&2 mpg321 "$_search_result" &
+            set_status
+
+          elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
+            playlist_file="$_search_result"
+
+            kill_music
+            2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
+            set_status
+          fi
         }
+      fi
+    }
 
-        _search_result="$(locate -iqt "$cmd_reply" | sed q)"
-
-        if [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]]; then
-            if [[ -d "$_search_result" ]];then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
-                set_status
-
-            elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
-                kill_music
-                2>/dev/null 1>&2 mpg321 "$_search_result" &
-                set_status
-
-            elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
-                playlist_file="$_search_result"
-
-                kill_music
-                2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
-                set_status
-
-            else
-                _search_result="$(locate -qt "$cmd_reply" | sed q)"
-
-                if [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]]; then
-                    if [[ -d $_search_result ]]; then
-                        kill_music
-                        2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
-                        set_status
-
-                    elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
-                        kill_music
-                        2>/dev/null 1>&2 mpg321 "$_search_result" &
-                        set_status
-
-                    elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
-                        playlist_file="$_search_result"
-
-                        kill_music
-                        2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
-                        set_status
-                    fi
-                fi
-            fi
-        fi
-
-        unset set_status
-        refresh
-
-    fi
+    unset set_status
+    refresh
+  }
 }
 
 search_in_dir () {
-    cmd_line "/" "search"
+  cmd_line "/" "search"
 
-    # If the search came up empty, redraw the current dir
-    if [[ -z ${list[*]} || -z $cmd_reply ]]; then
-        list=("${cur_list[@]}")
-        ((list_total=${#list[@]}-1))
-        redraw
-        search=
-    else
-        search=1
-    fi
+  # If the search came up empty, redraw the current dir
+  if [[ -z ${list[*]} || -z $cmd_reply ]]; then
+    list=("${cur_list[@]}")
+    ((list_total=${#list[@]}-1))
+    redraw
+    search=
+  else
+    search=1
+  fi
 }
 
-shuffle_all () {
+mute_or_unmute () {
+  2>/dev/null 1>&2 amixer -D pulse sset Master toggle
+  [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] &&
+    IS_MUTED=true || IS_MUTED=false
+
+  status_line
+}
+
+set_volume () {
+  cmd_line "volume: "
+  # if cmd_reply is between 0 & 100
+  if [[ "$cmd_reply" -ge 0 ]] && [[ "$cmd_reply" -le 100 ]]; then
+    2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}%"
+  fi
+
+  status_line
+}
+
+execute_command () {
+  cmd_line ":"
+
+  case "${cmd_reply}" in
+    quit|exit) exit 0 ;;
+    # Vim problems...
+    q|qa)      exit 0 ;;
+    wq|wqa)    exit 0 ;;
+    add)       add_marked_to_playlist ;;
+    rm|remov*) delete_playlist ;;
+    del*)      delete_playlist ;;
+    kill)      kill_music ;;
+    stop|stpo) kill_music ;;
+    pause)     pause_or_play ;;
+    play)      pause_or_play ;;
+    search*)   search_in_dir ;;
+    current*)  find_current_song ;;
+    now*)      find_current_song ;;
+    find*)     find_current_song ;;
+    locate*)   find_and_play ;;
+    *list*)    open "${XDG_MUSIC_DIR}"/.playlists ;;
+    home)      open "${XDG_MUSIC_DIR}" ;;
+  esac
+}
+
+go_to_child () {
+  if [ -d ${list[scroll]} ]; then
+    open "${list[scroll]}"
+    return
+  else
     kill_music
-    2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &
+    case "${list[scroll]}" in
+      *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
+      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
+      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+    esac
 
     IS_PAUSED=false
     STARTED=$(date +%s%3N)
 
     refresh
-}
-
-mute_or_unmute () {
-    2>/dev/null 1>&2 amixer -D pulse sset Master toggle
-    [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] &&
-        IS_MUTED=true || IS_MUTED=false
-
-    status_line
-}
-
-set_volume () {
-    cmd_line "volume: "
-    # if cmd_reply is between 0 & 100
-    if [[ "$cmd_reply" -ge 0 ]] && [[ "$cmd_reply" -le 100 ]]; then
-        2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}%"
-    fi
-
-    status_line
-}
-
-execute_command () {
-    cmd_line ":"
-
-    # Quit
-    if [[ "$cmd_reply" == "q" ]]; then
-        exit
-    fi
-
-    if [[ "$cmd_reply" == "add" ]]; then
-        add_marked_to_playlist
-    fi
-
-    if [[ "$cmd_reply" == "del" ]]; then
-        delete_playlist
-    fi
-
-    if [[ "$cmd_reply" == "kill" ]]; then
-        kill_music
-    fi
-
-    if [[ "$cmd_reply" == "list" ]]; then
-        open "${XDG_MUSIC_DIR}"/.playlists
-    fi
-
-#    if [[ "$cmd_reply" == "debug" ]]; then
-#        set -x
-#        DEBUG=true
-#        redraw full
-#    fi
-
-#    if [[ "$cmd_reply" == "debug-x" ]]; then
-#        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0" && exit
-#        DEBUG=true
-#        redraw full
-#    fi
-}
-
-go_to_child () {
-    if [[ ${list[scroll]} == *.mp3 ]]; then
-        kill_music
-        2>/dev/null 1>&2 mpg321 "${list[scroll]}" &
-
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-
-        refresh
-
-    elif [[ ${list[scroll]} == *.list ]]; then
-        kill_music
-        2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle &
-
-        IS_PAUSED=false
-        STARTED=$(date +%s%3N)
-
-        refresh
-
-    elif [[ -d ${list[scroll]} ]]; then
-        open "${list[scroll]}"
-    fi
+  fi
 }
 
 go_to_parent () {
-    # If a search was done, clear the results and open the current dir
-    if ((search == 1 && search_end_early != 1)); then
-        open "$PWD"
+  # If a search was done, clear the results and open the current dir
+  if ((search == 1 && search_end_early != 1)); then
+    open "$PWD"
 
-    # If '$PWD' is not $XDG_MUSIC_DIR or a subdirectory
-    # of, don't go to parent
-    elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/.playlists" ]]; then
-        find_previous=1
-        open "${PWD%/*}"
-    elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/"* ]]; then
-        find_previous=1
-        open "${PWD%/*}"
-    fi
+  # If '$PWD' is not $XDG_MUSIC_DIR or a subdirectory
+  # of, don't go to parent
+  elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/.playlists" ]]; then
+    find_previous=1
+    open "${PWD%/*}"
+  elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/"* ]]; then
+    find_previous=1
+    open "${PWD%/*}"
+  fi
 }
 
 scroll_down () {
-    ((scroll < list_total)) && {
-        ((scroll++))
-        ((y < max_items )) && ((y++))
+  ((scroll < list_total)) && {
+    ((scroll++))
+    ((y < max_items )) && ((y++))
 
-        format_line "$((scroll-1))"
-        printf "\n"
-        format_line "$scroll"
-    }
+    format_line "$((scroll-1))"
+    printf "\n"
+    format_line "$scroll"
+  }
 }
 
 scroll_up () {
-    ((scroll > 0)) && {
-        ((scroll--))
+  ((scroll > 0)) && {
+    ((scroll--))
 
-        format_line "$((scroll+1))"
+    format_line "$((scroll+1))"
 
-        if ((y < 2)); then
-            printf "\e[1L"
-        else
-            printf "\e[A"
-            ((y--))
-        fi
+    if ((y < 2)); then
+      printf "\e[1L"
+    else
+      printf "\e[A"
+      ((y--))
+    fi
 
-        format_line "$scroll"
-    }
+    format_line "$scroll"
+  }
 }
 
 jump_down () {
-    for i in {1..5}; do
-        scroll_down
-    done
+  for i in {1..5}; do
+    scroll_down
+  done
 }
 
 jump_up () {
-    for i in {1..5}; do
-        scroll_up
-    done
+  for i in {1..5}; do
+    scroll_up
+  done
 }
 
 toggle_hidden_files () {
-    # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'.
-    #                This also works for '3' or more values with
-    #                some modification.
-    shopt_flags=(u s)
-    shopt -"${shopt_flags[((a=a>0?0:++a))]}" dotglob
-    redraw full
+  # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'.
+  #                This also works for '3' or more values with
+  #                some modification.
+  shopt_flags=(u s)
+  shopt -"${shopt_flags[((a=a>0?0:++a))]}" dotglob
+  redraw full
 }
 
-key () {
-    case "${1}" in
+key_switch () {
+  case "${1}" in
 
-        :) execute_command ;;
+    # Navigation
+    h|D|$'\eOD'|$'\e[D'|$'\b'|$'\177') go_to_parent ;;
+    j|B|$'\eOB'|$'\e[B') scroll_down ;;
+    J) jump_down ;;
+    k|A|$'\eOA'|$'\e[A') scroll_up ;;
+    K) jump_up ;;
+    l|C|$'\eOC'|$'\e[C') go_to_child ;;
+    g) ((scroll != 0)) && ((scroll=0)); redraw ;;
+    G) ((scroll != list_total)) && ((scroll=list_total)); redraw ;;
 
-        l|C|$'\eOC'|$'\e[C') go_to_child ;;
+    # Quick Nav
+    ~|0) open "$XDG_MUSIC_DIR" ;;
+    [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "$favorite" ;;
+    f) find_current_song ;;
 
-        h|D|$'\eOD'|$'\e[D'|$'\b'|$'\177') go_to_parent ;;
+    # Music Controls
+    a) play_all_in_dir ;;
+    s) shuffle_all_in_dir ;;
+    S) shuffle_all ;;
+    n) next_song ;;
+    " ") pause_or_play ;;
+    X) kill_music; refresh ;;
 
-        j|B|$'\eOB'|$'\e[B') scroll_down ;;
+    # Playlists
+    "") play_marked_songs ;;
+    c) marked_files=(); redraw; status_line;;
+    p) mark_song_for_playlist ;;
+    \`) open "${XDG_MUSIC_DIR}/.playlists" ;;
 
-        J) jump_down ;;
+    # Volume Controls
+    v|=) set_volume ;;
+    u|+) 2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}%+" unmute; status_line ;;
+    d|-) 2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}%-"; status_line ;;
+    m) mute_or_unmute ;;
 
-        k|A|$'\eOA'|$'\e[A') scroll_up ;;
+    # Other
+    :) execute_command ;;
+    /) search_in_dir ;;
+    \;) find_and_play ;;
+    .) toggle_hidden_files ;;
+    r) clear_screen; redraw full; refresh ;;
 
-        K) jump_up ;;
-
-        # Jump to top
-        g) ((scroll != 0)) && ((scroll=0)); redraw ;;
-
-        # Jump to bottom
-        G) ((scroll != list_total)) && ((scroll=list_total)); redraw ;;
-
-        /) search_in_dir ;;
-
-        \;) find_and_play ;;
-
-        .) toggle_hidden_files ;;
-
-        f) find_current_song ;;
-
-        " ") pause_or_play ;;
-
-        # "" ENTER key
-        "") play_marked_songs ;;
-
-        c) marked_files=(); redraw; status_line;;
-
-        p) mark_song_for_playlist ;;
-
-        n) next_song ;;
-
-        \`) open "${XDG_MUSIC_DIR}/.playlists" ;;
-
-        ~|0) open "$XDG_MUSIC_DIR" ;;
-
-        a) play_all_in_dir ;;
-
-        s) shuffle_all_in_dir ;;
-
-        S) shuffle_all ;;
-
-        # Volume Up
-        u|+) 2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}%+" unmute; status_line ;;
-
-        # Volume Down
-        d|-) 2>/dev/null 1>&2 amixer -D pulse sset Master "${INCREMENT_VOLUME}%-"; status_line ;;
-
-        v|=) set_volume ;;
-
-        m) mute_or_unmute ;;
-
-        # Jump To Favs
-        [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "$favorite" ;;
-
-        # Kill mpg321
-        X) kill_music; refresh ;;
-
-        # Redraw, useful when bugs appear!
-        r) clear_screen; redraw full; refresh ;;
-
-        # Create a new instance of the program
-        # and exit the current instance (for testing).
-        # NOTE this will leave extra processes running
-        # on exit.
-        R)
-            kill -SIGTERM "$(2>/dev/null awk 'NR==1{print}' "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
-            ~/GitHub/shellaro/shellaro "$0" && exit
-        ;;
-
-        q|Q) exit ;;
-    esac
+    q|Q) exit ;;
+  esac
 }
 
-get_args () {
-    while [[ "$1" ]]; do
-        case "$1" in
-            "-v"|"--version")
-                printf "shellaro %s\n" "$VERSION"
-                exit
-            ;;
+background_status_loop () {
+  # Infinite loop
+  while (( 1 )); do
+    local _mpg321_pid
+    local _status
 
-            "-d"|"--debug")
-                [[ "$2" ]] && {
-                    case "$2" in
-                        "x")
-                            strace -qqfe execve ~/GitHub/shellaro/shellaro "$0"
-                            exit
-                        ;;
-                    esac
-                }
+    _mpg321_pid=$(pgrep mpg321)
 
-                set -x
-                DEBUG=true
-            ;;
+    _status=$(readlink -f /proc/"${_mpg321_pid}"/fd/3 \
+      | tr -cd "[:alnum:]")
 
-        esac
-        shift
-    done
+    echo "$_status" > "${XDG_CACHE_HOME}/shellaro/now_playing"
+
+    [[ -t 1 ]] || exit 1
+
+    sleep 1
+  done
 }
 
-shellaro_daemon () {
-    # Infinite loop
-    while true; do
-        local _mpg321_pid=
-        local _status=
+main_event_loop () {
+  # Main event loop
+  while (( 1 )); do
+    read "${read_flags[@]}" -srn 1 && key_switch "$REPLY"
 
-        _mpg321_pid=$(pgrep mpg321)
+    # Exit if there is no longer a terminal attached
+    [[ -t 1 ]] || exit 1
 
-        _status=$(readlink -f /proc/"${_mpg321_pid}"/fd/3 \
-            | tr -cd "[:alnum:]")
-
-        echo "$_status" > "${XDG_CACHE_HOME}/shellaro/now_playing"
-
-        [[ -t 1 ]] || exit 1
-
-        sleep 1
-    done
+    # refresh the screen if music changes
+    [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]] && refresh
+  done
 }
 
-main () {
-    ! [ "$(which mpg321)" ] && {
-        echo "shellaro requires mpg321, is it installed?"
-        exit 1
-    }
+teardown () {
+  # escapes {{{
+  # '\e[?7h':   Re-enable line wrapping.
+  # '\e[?25h':  Unhide the cursor.
+  # '\e[2J':    Clear the terminal.
+  # '\e[;r':    Set the scroll region to its default value.
+  #             Also sets cursor to (0,0).
+  # '\e[?1049l: Restore main screen buffer. }}}
+  printf "\e[?7h\e[?25h\e[2J\e[;r\e[?1049l"
 
-    # Don't record function calls in command history
-    set -o nolog
+  set +o pipefail
+  set +h
 
-    set -o pipefail
+  echo "" > "${XDG_CACHE_HOME}/shellaro/now_playing"
+  echo "" > "${XDG_CACHE_HOME}/shellaro/playlist"
 
-    # Locate & remember commands invoked by functions as functions are defined.
-    set -h
+  # Show input
+  stty echo
 
-    get_args "$@"
-    set_initial_status || error "initial status check failed"
+  2>/dev/null kill -SIGTERM \
+    "$(2>/dev/null awk 'NR==1{print}' \
+    "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
 
-    set -e
+  [[ "$DEBUG" == true ]] && {
+    set +x
+    DEBUG=false
+  }
 
-    # Do nothing if cd fails
-    cd "${2:-$1}" &>/dev/null ||:
-
-    # bash 5 and some versions of bash 4 don't allow SIGWINCH to interrupt
-    # a 'read' command and instead wait for it to complete. In this case it
-    # causes the window to not redraw on resize until the user has pressed
-    # a key (causing the read to finish). This sets a read timeout on the
-    # affected versions of bash
-    ((BASH_VERSINFO[0] > 3)) &&
-        read_flags=(-t 0.60)
-
-    # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
-    # 'nullglob':   Don't expand non-matching globs to themselves
-    shopt -s nocaseglob nullglob
-
-    # Trap the exit signal (we need to reset the terminal to a useable state.)
-    trap 'cleanup' EXIT
-
-    # Trap terminate signal for a clean kill.
-    trap 'cleanup' SIGTERM
-
-    # Trap the window resize signal (handle window resize events)
-    trap 'get_term_size; redraw' WINCH
-
-    # TODO install script
-    #{{{
-    [[ ! -d "${XDG_MUSIC_DIR}/.playlists" ]] && {
-        mkdir -p "${XDG_MUSIC_DIR}/.playlists"
-    }
-
-    [[ ! -f "${XDG_MUSIC_DIR}/.playlists/ALL" ]] && {
-        touch "${XDG_MUSIC_DIR}/.playlists/ALL"
-    }
-
-    [[ ! -d "${XDG_CACHE_HOME}/shellaro" ]] && {
-        mkdir -p "${XDG_CACHE_HOME}/shellaro"
-    }
-
-    [[ ! -f "${XDG_CACHE_HOME}/shellaro/playlist" ]] && {
-        touch "${XDG_CACHE_HOME}/shellaro/playlist"
-    }
-
-    [[ ! -f "${XDG_CACHE_HOME}/shellaro/error_log" ]] && {
-        touch "${XDG_CACHE_HOME}/shellaro/error_log"
-    }
-
-    [[ ! -f "${XDG_CACHE_HOME}/shellaro/daemon_pid" ]] && {
-        touch "${XDG_CACHE_HOME}/shellaro/daemon_pid"
-    }
-
-    [[ ! -f "${XDG_CACHE_HOME}/shellaro/now_playing" ]] && {
-        touch "${XDG_CACHE_HOME}/shellaro/now_playing"
-    }
-    #}}}
-
-    get_term_size
-    setup_tui
-
-    set +e
-
-    open "${XDG_MUSIC_DIR}" || fatal "could not open XDG_MUSIC_DIR"
-    redraw full
-    status_line
-
-    # Run and cache PID for cleanup
-    shellaro_daemon & echo $! > "${XDG_CACHE_HOME}/shellaro/daemon_pid"
-
-    # Main loop
-    while true; do
-        read "${read_flags[@]}" -srn 1 && key "$REPLY"
-
-        # Exit if there is no longer a terminal attached
-        [[ -t 1 ]] || exit 1
-
-        # refresh the screen if music changes
-        [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]] && refresh
-    done
+  exit 0
 }
 
-main "$@"
+init () {
+  set -o pipefail
+
+  # Locate & remember commands invoked by functions as functions are defined.
+  set -h
+
+  get_args "$@"
+  set_initial_status || error "initial status check failed"
+
+  set -e
+
+  # Do nothing if cd fails
+  cd "${2:-$1}" &>/dev/null ||:
+
+  # {{{ bash 5 and some versions of bash 4 don't allow SIGWINCH to interrupt
+  # a 'read' command and instead wait for it to complete. In this case it
+  # causes the window to not redraw on resize until the user has pressed
+  # a key (causing the read to finish). This sets a read timeout on the
+  # affected versions of bash }}}
+  ((BASH_VERSINFO[0] > 3)) &&
+    read_flags=(-t 0.60)
+
+  # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
+  # 'nullglob':   Don't expand non-matching globs to themselves
+  shopt -s nocaseglob nullglob
+
+  # Trap the exit signal (to reset the terminal to a useable state.)
+  trap 'teardown' EXIT SIGTERM
+
+  # Trap the window resize signal (handle window resize events)
+  trap 'get_term_size; redraw' WINCH
+
+  # TODO install script
+  #{{{
+  # make sure mpg321 is installed
+  [ "$(which mpg321)" ] || {
+    echo "shellaro requires mpg321, is it installed?"
+    exit 1
+  }
+
+  [ "$(which amixer)" ] || {
+    echo "shellaro requires amixer, is it installed?"
+    exit 1
+  }
+
+  [ "$(which locate)" ] || {
+    echo "shellaro requires amixer, is it installed?"
+    exit 1
+  }
+
+  [[ ! -d "${XDG_MUSIC_DIR}/.playlists" ]] && {
+    mkdir -p "${XDG_MUSIC_DIR}/.playlists"
+  }
+
+  [[ ! -f "${XDG_MUSIC_DIR}/.playlists/ALL" ]] && {
+    touch "${XDG_MUSIC_DIR}/.playlists/ALL"
+  }
+
+  [[ ! -d "${XDG_CACHE_HOME}/shellaro" ]] && {
+    mkdir -p "${XDG_CACHE_HOME}/shellaro"
+  }
+
+  [[ ! -f "${XDG_CACHE_HOME}/shellaro/playlist" ]] && {
+    touch "${XDG_CACHE_HOME}/shellaro/playlist"
+  }
+
+  [[ ! -f "${XDG_CACHE_HOME}/shellaro/error_log" ]] && {
+    touch "${XDG_CACHE_HOME}/shellaro/error_log"
+  }
+
+  [[ ! -f "${XDG_CACHE_HOME}/shellaro/daemon_pid" ]] && {
+    touch "${XDG_CACHE_HOME}/shellaro/daemon_pid"
+  }
+
+  [[ ! -f "${XDG_CACHE_HOME}/shellaro/now_playing" ]] && {
+    touch "${XDG_CACHE_HOME}/shellaro/now_playing"
+  }
+  #}}}
+
+  get_term_size
+  setup_terminal
+
+  set +e
+
+  open "${XDG_MUSIC_DIR}" || fatal "could not open XDG_MUSIC_DIR"
+  redraw full
+  status_line
+
+  # run and cache PID for teardown
+  background_status_loop & echo $! > "${XDG_CACHE_HOME}/shellaro/daemon_pid"
+
+  main_event_loop
+}
+
+init "$@"
