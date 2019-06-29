@@ -67,7 +67,7 @@ export INCREMENT_VOLUME=5
 #}}}
 
 # Error Logging
-export ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
+ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
 
 error () {
   echo "[ERROR]   $*" \
@@ -108,17 +108,17 @@ get_args () {
 }
 
 set_initial_status () {
-  local _mpg321_pid
+  local _status_path
   local _mpg321_status
 
-  _mpg321_pid="$(pgrep mpg321)"
+  _status_path="/proc/$(pgrep mpg321)/status"
 
-  [ -n "$_mpg321_pid" ] && {
-    _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
+  [ -f "$_status_path" ] && {
+    _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "${_status_path}")
 
     case $_mpg321_status in
-      "S") IS_PAUSED=false ;;
-      "T") IS_PAUSED=true ;;
+      "S") PAUSED=false ;;
+      "T") PAUSED=true ;;
     esac
   }
 
@@ -130,12 +130,12 @@ set_initial_status () {
 }
 
 read_dir () {
-  local _dirs=()
-  local _files=()
+  local _dirs
+  local _files
   local _item_index
 
   for item in "${PWD}/"*; do
-    if [[ -d $item ]]; then
+    if [ -d "$item" ]; then
       _dirs+=("$item")
       ((_item_index++))
 
@@ -148,7 +148,7 @@ read_dir () {
 
   list=("${_dirs[@]}" "${_files[@]}")
 
-  [[ -z ${list[0]} ]] &&
+  [ -z "${list[0]}" ] &&
     list[0]="empty"
 
   ((list_total=${#list[@]}-1))
@@ -165,14 +165,14 @@ format_line () {
   _file_name="${list[$1]##*/}"
 
   # If the dir is empty, return
-  if [[ -z "${list[$1]}" ]]; then
+  if [ -z "${list[$1]}" ]; then
     return
 
-  elif [[ -d "${list[$1]}" ]]; then
+  elif [ -d "${list[$1]}" ]; then
     _format+="\\e[${fi:-${COLOR_DIR_BOLD};${COLOR_DIR}}m"
     _suffix+='/'
 
-  elif [[ "${list[$1]}" == *"$NOW_PLAYING" ]]; then
+  elif [[ "${list[$1]}" == *"$NOW_PLAYING"* ]] && [[ "$NOW_PLAYING" == *".mp3" ]]; then
     _suffix+='♫ '
 
   else
@@ -302,13 +302,13 @@ kill_music () {
 
   # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
   elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
-    kill -CONT "$_mpg321_pid";\
-      2>/dev/null 1>&2 killall -s SIGINT mpg321;\
-      2>/dev/null 1>&2 killall -s SIGINT mpg321
+    kill -CONT "$_mpg321_pid"
+    2>/dev/null 1>&2 killall -s SIGINT mpg321
+    2>/dev/null 1>&2 killall -s SIGINT mpg321
 
   elif [ -n "$_mpg321_pid" ]; then
-    2>/dev/null 1>&2 killall -s SIGINT mpg321;\
-      2>/dev/null 1>&2 killall -s SIGINT mpg321
+    2>/dev/null 1>&2 killall -s SIGINT mpg321
+    2>/dev/null 1>&2 killall -s SIGINT mpg321
   fi
 }
 
@@ -335,7 +335,7 @@ status_line () {
     fatal "readlink has failed"
   }
 
-  if [[ "$IS_PAUSED" == true ]]; then
+  if [[ "$PAUSED" == true ]]; then
     _icon="$ICON_PAUSED"
     _color="$COLOR_PAUSED"
   else
@@ -385,21 +385,18 @@ status_line () {
 }
 
 redraw () {
-  clear_screen
-
   [ "$1" == full ] && {
     read_dir
     scroll=0
   }
 
+  clear_screen
   draw_screen
 }
 
 refresh () {
   status_line
   clear_screen
-  # TODO seperate now playing info and status bar to fix tmux redraw issues
-  # status_line
   draw_screen
 }
 
@@ -562,7 +559,7 @@ next_song () {
     [[ "$_age" -ge "$_min_age" ]] && {
       [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]] && {
         kill -CONT "$_mpg321_pid"
-        IS_PAUSED=false
+        PAUSED=false
       }
 
       # A single SIGINT (ctrl-c) to mpg321 goes to the next song
@@ -592,7 +589,7 @@ pause_or_play () {
       esac
     fi
 
-    IS_PAUSED=false
+    PAUSED=false
     STARTED=$(date +%s%3N)
     refresh
     return
@@ -605,11 +602,11 @@ pause_or_play () {
   case $_mpg321_status in
     "S")
       kill -STOP "$_mpg321_pid"
-      IS_PAUSED=true
+      PAUSED=true
     ;;
     "T")
       kill -CONT "$_mpg321_pid"
-      IS_PAUSED=false
+      PAUSED=false
       STARTED=$(date +%s%3N)
     ;;
   esac
@@ -621,7 +618,7 @@ shuffle_all () {
   kill_music
   2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &
 
-  IS_PAUSED=false
+  PAUSED=false
   STARTED=$(date +%s%3N)
 
   refresh
@@ -640,7 +637,7 @@ play_all_in_dir () {
     esac
   fi
 
-  IS_PAUSED=false
+  PAUSED=false
   STARTED=$(date +%s%3N)
 
   refresh
@@ -659,7 +656,7 @@ shuffle_all_in_dir () {
     esac
   fi
 
-  IS_PAUSED=false
+  PAUSED=false
   STARTED=$(date +%s%3N)
 
   refresh
@@ -703,8 +700,7 @@ play_marked_songs () {
     esac
   fi
 
-
-  IS_PAUSED=false
+  PAUSED=false
   STARTED=$(date +%s%3N)
   refresh
 }
@@ -751,17 +747,10 @@ find_current_song () {
   [ -z "$_mpg321_pid" ] &&
     return
 
-  open "$(locate "$(readlink -e /proc/"$_mpg321_pid"/fd/3  \
-    | awk -F "/" '{print $NF}')" \
-    | awk -F "/" '{$NF=""; print $0}' \
-    | sed s/' '/'\/'/g)" || exit 1
+  open "$(dirname "$(readlink -e /proc/"$_mpg321_pid"/fd/3)")"
 
-  for i in {1..1000}; do
-    if [[ "${list[scroll]}" == *"$NOW_PLAYING" ]]; then
-      return
-    else
-      scroll_down
-    fi
+  until [[ "${list[scroll]}" == *"$NOW_PLAYING" ]]; do
+    scroll_down
   done
 }
 
@@ -772,7 +761,7 @@ find_and_play () {
     local _search_result
 
     set_status () {
-      IS_PAUSED=false
+      PAUSED=false
       STARTED=$(date +%s%3N)
     }
 
@@ -884,22 +873,22 @@ execute_command () {
 }
 
 go_to_child () {
-  if [ -d ${list[scroll]} ]; then
+  [ -d ${list[scroll]} ] && {
     open "${list[scroll]}"
     return
-  else
-    kill_music
-    case "${list[scroll]}" in
-      *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
-      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
-      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
-    esac
+  }
 
-    IS_PAUSED=false
-    STARTED=$(date +%s%3N)
+  kill_music
 
-    refresh
-  fi
+  case "${list[scroll]}" in
+    *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
+    *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
+    */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+  esac
+
+  PAUSED=false; STARTED=$(date +%s%3N)
+
+  refresh
 }
 
 go_to_parent () {
@@ -1017,7 +1006,6 @@ key_switch () {
 }
 
 background_status_loop () {
-  # Infinite loop
   while (( 1 )); do
     local _mpg321_pid
     local _status
@@ -1029,22 +1017,19 @@ background_status_loop () {
 
     echo "$_status" > "${XDG_CACHE_HOME}/shellaro/now_playing"
 
-    [[ -t 1 ]] || exit 1
-
-    sleep 1
+    sleep 0.5
   done
 }
 
 main_event_loop () {
-  # Main event loop
   while (( 1 )); do
     read "${read_flags[@]}" -srn 1 && key_switch "$REPLY"
 
-    # Exit if there is no longer a terminal attached
-    [[ -t 1 ]] || exit 1
-
     # refresh the screen if music changes
     [[ "$FG_STATUS" != "$(cat "${XDG_CACHE_HOME}/shellaro/now_playing")" ]] && refresh
+
+    # exit if there is no longer a terminal attached
+    [[ -t 1 ]] || exit 1
   done
 }
 
@@ -1086,9 +1071,8 @@ init () {
   set -h
 
   get_args "$@"
-  set_initial_status || error "initial status check failed"
 
-  set -e
+  set_initial_status || fatal "initial status check failed"
 
   # Do nothing if cd fails
   cd "${2:-$1}" &>/dev/null ||:
@@ -1099,7 +1083,7 @@ init () {
   # a key (causing the read to finish). This sets a read timeout on the
   # affected versions of bash }}}
   ((BASH_VERSINFO[0] > 3)) &&
-    read_flags=(-t 0.60)
+    read_flags=(-t 0.10)
 
   # 'nocaseglob': Glob case insensitively (Used for case insensitive search)
   # 'nullglob':   Don't expand non-matching globs to themselves
@@ -1158,12 +1142,9 @@ init () {
   }
   #}}}
 
-  get_term_size
-  setup_terminal
-
-  set +e
-
   open "${XDG_MUSIC_DIR}" || fatal "could not open XDG_MUSIC_DIR"
+
+  get_term_size && setup_terminal
   redraw full
   status_line
 
