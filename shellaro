@@ -9,61 +9,57 @@
 
 VERSION="1.6.1"
 
-# CONFIG
-#{{{
 # TODO external config file
-
-# The directory Shellaro looks in for music
-export XDG_MUSIC_DIR=${XDG_MUSIC_DIR:-$HOME/Music}
-
-# Cache directory
-export XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
+# CONFIG {{{
 
 # Shortcuts corresponding to number keys
-export SHORTCUT_1=~/Music/LedZeppelin
-export SHORTCUT_2=~/Music/MotleyCrue
-export SHORTCUT_3=~/Music/SlightlyStoopid
-export SHORTCUT_4=~/Music/Sublime
-export SHORTCUT_5=~/Music/TheDoors
-export SHORTCUT_6=~/Music/TheRollingStones
-export SHORTCUT_7=~/Music/TheWho
-export SHORTCUT_8=~/Music/VanHalen
-export SHORTCUT_9=~/Music/OTHER
+export SHORTCUT_1=${SHORTCUT_1:-$XDG_MUSIC_DIR/Sublime}
+export SHORTCUT_2=${SHORTCUT_2:-$XDG_MUSIC_DIR/RageAgainstTheMachine}
+export SHORTCUT_3=${SHORTCUT_3:-$XDG_MUSIC_DIR/VariousArtists}
+export SHORTCUT_4=${SHORTCUT_4:-$XDG_MUSIC_DIR/}
+export SHORTCUT_5=${SHORTCUT_5:-$XDG_MUSIC_DIR/}
+export SHORTCUT_6=${SHORTCUT_6:-$XDG_MUSIC_DIR/}
+export SHORTCUT_7=${SHORTCUT_7:-$XDG_MUSIC_DIR/}
+export SHORTCUT_8=${SHORTCUT_8:-$XDG_MUSIC_DIR/}
+export SHORTCUT_9=${SHORTCUT_9:-$XDG_MUSIC_DIR/}
+
+# The directory Shellaro looks in for music
+XDG_MUSIC_DIR=${XDG_MUSIC_DIR:-$HOME/Music}
+
+# Cache directory
+XDG_CACHE_HOME=${XDG_CACHE_HOME:-$HOME/.cache}
 
 # Status line
-export COLOR_PLAYING=42 # Green
-export COLOR_PAUSED="40;37" # Black with white text
-export COLOR_STOPPED="40;37"
-export COLOR_MUTED=41 # Red
-
-# Cursor color
-export COLOR_CURSOR=37
+COLOR_PLAYING=42 # Green
+COLOR_paused="40;37" # Black with white text
+COLOR_STOPPED="40;37"
+COLOR_muted=41 # Red
 
 # Directories
-export COLOR_DIR=34 # Blue
-export COLOR_DIR_BOLD=1 # Bold
+COLOR_DIR=34 # Blue
+COLOR_DIR_BOLD=1 # Bold
 
 # Color of currently playing song
-export COLOR_CURRENT_SONG=32 # Green
-export COLOR_CURRENT_SONG_BOLD=1
+COLOR_CURRENT_SONG=32 # Green
+COLOR_CURRENT_SONG_BOLD=1
 
 # Other
-export COLOR_OTHER=37
-export COLOR_OTHER_BOLD=0
+COLOR_OTHER=37
+COLOR_OTHER_BOLD=0
 
 # Marked files
-export COLOR_MARKED=33 # Yellow
-export COLOR_MARKED_BOLD=1
-export ICON_MARKED="›"
+COLOR_MARKED=33 # Yellow
+COLOR_MARKED_BOLD=1
+ICON_MARKED="›"
 
 # Status line icons
-export ICON_PLAYING="▷"
-export ICON_PAUSED="◫"
-export ICON_STOPPED="□"
-export ICON_MUTED="MUTE"
+ICON_PLAYING="▷"
+ICON_paused="◫"
+ICON_STOPPED="□"
+ICON_muted="MUTE"
 
 # Percent to raise or lower volume
-export INCREMENT_VOLUME=5
+INCREMENT_VOLUME=5
 #}}}
 
 # Error Logging
