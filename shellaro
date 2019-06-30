@@ -118,16 +118,16 @@ set_initial_status () {
     _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "${_status_path}")
 
     case $_mpg321_status in
-      "S") PAUSED=false ;;
-      "T") PAUSED=true ;;
+      "S") paused=false ;;
+      "T") paused=true ;;
     esac
   }
 
   [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] && {
-    IS_MUTED=true
-  } || IS_MUTED=false
+    muted=true
+  } || muted=false
 
-  STARTED=$(date +%s%3N)
+  started=$(date +%s%3N)
 }
 
 read_dir () {
@@ -293,6 +293,14 @@ clear_screen () {
     "$((LINES-2))" "$max_items"
 }
 
+play () {
+  2>/dev/null 1>&2 mpg321 "$@" &
+}
+
+send_sigint () {
+  2>/dev/null 1>&2 killall -s SIGINT mpg321
+}
+
 kill_music () {
   local _mpg321_pid
 
@@ -305,12 +313,10 @@ kill_music () {
   # If mpg321 is suspended, resume & send 2 SIGINTs to kill it
   elif [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]]; then
     kill -CONT "$_mpg321_pid"
-    2>/dev/null 1>&2 killall -s SIGINT mpg321
-    2>/dev/null 1>&2 killall -s SIGINT mpg321
+    send_sigint; send_sigint
 
   elif [ -n "$_mpg321_pid" ]; then
-    2>/dev/null 1>&2 killall -s SIGINT mpg321
-    2>/dev/null 1>&2 killall -s SIGINT mpg321
+    send_sigint; send_sigint
   fi
 }
 
@@ -337,19 +343,19 @@ status_line () {
     fatal "readlink has failed"
   }
 
-  if [[ "$PAUSED" == true ]]; then
-    _icon="$ICON_PAUSED"
-    _color="$COLOR_PAUSED"
+  if [[ "$paused" == true ]]; then
+    _icon="$ICON_paused"
+    _color="$COLOR_paused"
   else
     _icon="$ICON_PLAYING"
     _color="$COLOR_PLAYING"
   fi
 
-  if [[ "${IS_MUTED}" == true ]]; then
-    _volume="$ICON_MUTED"
-    _color="$COLOR_MUTED"
+  if [[ "${muted}" == true ]]; then
+    _volume="$ICON_muted"
+    _color="$COLOR_muted"
   else
-    _volume="$(amixer -D pulse get Master \
+    _volume="$(2>/dev/null amixer -D pulse get Master \
       | awk '/Left:/' \
       | awk -F '[\[\]]' '{print $2"  "}' \
       | cut -c 1-4 \
@@ -402,6 +408,16 @@ refresh () {
   draw_screen
 }
 
+open () {
+  [ -d "${1}"/ ] && {
+    search=
+    search_end_early=
+    export previous_dir="$PWD"
+    cd "${1:-/}" ||:
+    redraw full
+  }
+}
+
 cmd_line () {
   cmd_reply=
 
@@ -415,7 +431,7 @@ cmd_line () {
 
         # Clear tab-completion
         unset comp c
-      ;;
+        ;;
 
       # Tab
       $'\t')
@@ -423,24 +439,24 @@ cmd_line () {
 
         # Pass the argument dirs to limit completion to directories
         [[ $2 == dirs ]] &&
-            comp_glob="${cmd_reply*/}"
+          comp_glob="${cmd_reply*/}"
 
         # Generate a completion list once
         [[ -z ${comp[0]} ]] &&
-            IFS=$'\n' read -d "" -ra comp < <(compgen -G "${comp_glob}")
+          IFS=$'\n' read -d "" -ra comp < <(compgen -G "${comp_glob}")
 
         # On each tab press, cycle through the completion list
         [[ -n ${comp[c]} ]] && {
-            cmd_reply="${comp[c]}"
-            ((c=c >= ${#comp[@]}-1 ? 0 : ++c))
+          cmd_reply="${comp[c]}"
+          ((c=c >= ${#comp[@]}-1 ? 0 : ++c))
         }
-      ;;
+        ;;
 
       # Escape / Custom 'no' value (used as a replacement for '-n 1')
       $'\e'|"${3:-null}")
         cmd_reply=
         break
-      ;;
+        ;;
 
       # Enter/Return
       "")
@@ -459,13 +475,13 @@ cmd_line () {
         }
 
         break
-      ;;
+        ;;
 
       # Custom 'yes' value (used as a replacement for '-n 1')
       "${2:-null}")
         cmd_reply="$read_reply"
         break
-      ;;
+        ;;
 
       # Anything else, add it to read reply
       " "|*)
@@ -473,7 +489,7 @@ cmd_line () {
 
         # Clear tab-completion
         unset comp c
-      ;;
+        ;;
     esac
 
     # Search on keypress if search passed as an argument
@@ -544,7 +560,7 @@ next_song () {
   _mpg321_pid=$(pgrep mpg321)
   _min_age=1050 # milliseconds
   _keypress=$(date +%s%3N)
-  _age="((${_keypress}-${STARTED}))"
+  _age="((${_keypress}-${started}))"
 
   [ -n "$_mpg321_pid" ] && {
     # Don't allow the user to skip to the next song within the first second,
@@ -552,12 +568,12 @@ next_song () {
     [[ "$_age" -ge "$_min_age" ]] && {
       [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]] && {
         kill -CONT "$_mpg321_pid"
-        PAUSED=false
+        paused=false
       }
 
       # A single SIGINT (ctrl-c) to mpg321 goes to the next song
-      2>/dev/null 1>&2 killall -s SIGINT mpg321
-      STARTED=$(date +%s%3N)
+      send_sigint
+      started=$(date +%s%3N)
 
       refresh
     }
@@ -573,17 +589,17 @@ pause_or_play () {
   [ -z "$_mpg321_pid" ] && {
     # If list item is a dir, play all in dir
     if [ -d ${list[scroll]} ]; then
-      2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
+      play "${list[scroll]}" -B
     else
       case "${list[scroll]}" in
-        *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
-        *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
-        */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+        *.mp3)  play "${list[scroll]}" ;;
+        *.list) play --list "${list[scroll]}" ;;
+        */ALL)  play "$XDG_MUSIC_DIR" -B ;;
       esac
     fi
 
-    PAUSED=false
-    STARTED=$(date +%s%3N)
+    paused=false
+    started=$(date +%s%3N)
     refresh
     return
   }
@@ -595,13 +611,13 @@ pause_or_play () {
   case $_mpg321_status in
     "S")
       kill -STOP "$_mpg321_pid"
-      PAUSED=true
-    ;;
+      paused=true
+      ;;
     "T")
       kill -CONT "$_mpg321_pid"
-      PAUSED=false
-      STARTED=$(date +%s%3N)
-    ;;
+      paused=false
+      started=$(date +%s%3N)
+      ;;
   esac
 
   status_line
@@ -609,10 +625,10 @@ pause_or_play () {
 
 shuffle_all () {
   kill_music
-  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle &
+  play "$XDG_MUSIC_DIR" -B --shuffle
 
-  PAUSED=false
-  STARTED=$(date +%s%3N)
+  paused=false
+  started=$(date +%s%3N)
 
   refresh
 }
@@ -620,18 +636,18 @@ shuffle_all () {
 play_all_in_dir () {
   kill_music
 
-  if [[ -d ${list[scroll]} ]]; then
-    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B &
+  if [ -d ${list[scroll]} ]; then
+    play "${list[scroll]}" -B
   else
     case "${list[scroll]}" in
-      *.mp3)  2>/dev/null 1>&2 mpg321 ./*.mp3 & ;;
-      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
-      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+      *.mp3)  play ./*.mp3 ;;
+      *.list) play --list "${list[scroll]}" ;;
+      */ALL)  play "$XDG_MUSIC_DIR" -B ;;
     esac
   fi
 
-  PAUSED=false
-  STARTED=$(date +%s%3N)
+  paused=false
+  started=$(date +%s%3N)
 
   refresh
 }
@@ -639,18 +655,18 @@ play_all_in_dir () {
 shuffle_all_in_dir () {
   kill_music
 
-  if [[ -d ${list[scroll]} ]]; then
-    2>/dev/null 1>&2 mpg321 "${list[scroll]}" -B --shuffle &
+  if [ -d ${list[scroll]} ]; then
+    play "${list[scroll]}" -B --shuffle
   else
     case "${list[scroll]}" in
-      *.mp3) 2>/dev/null 1>&2 mpg321 ./*.mp3 --shuffle & ;;
-      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
-      */ALL) 2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B --shuffle & ;;
+      *.mp3)  play ./*.mp3 --shuffle ;;
+      *.list) play --list "${list[scroll]}" --shuffle ;;
+      */ALL)  play "$XDG_MUSIC_DIR" -B --shuffle ;;
     esac
   fi
 
-  PAUSED=false
-  STARTED=$(date +%s%3N)
+  paused=false
+  started=$(date +%s%3N)
 
   refresh
 }
@@ -683,18 +699,18 @@ play_marked_songs () {
   if ((${#marked_files[@]} != 0)); then
     playlist_file="${XDG_CACHE_HOME}/shellaro/playlist"
     printf "%s\n" "${marked_files[@]}" > "$playlist_file"
-    2>/dev/null 1>&2 mpg321 --list "$playlist_file" &
+    play --list "$playlist_file"
     marked_files=()
   else
     case "${list[scroll]}" in
-      *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
-      *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" & ;;
-      */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+      *.mp3)  play "${list[scroll]}" ;;
+      *.list) play --list "${list[scroll]}" ;;
+      */ALL)  play "$XDG_MUSIC_DIR" -B ;;
     esac
   fi
 
-  PAUSED=false
-  STARTED=$(date +%s%3N)
+  paused=false
+  started=$(date +%s%3N)
   refresh
 }
 
@@ -751,59 +767,31 @@ find_and_play () {
   cmd_line "locate: "
 
   [ -n "$cmd_reply" ] && {
+    local _search_string
     local _search_result
 
-    set_status () {
-      PAUSED=false
-      STARTED=$(date +%s%3N)
-    }
+    _search_string="--color=never $cmd_reply $XDG_MUSIC_DIR"
+    _search_result="$(fd "$_search_string" | awk 'NR==1{print}')"
 
-    _search_result="$(locate -iqt "$cmd_reply" | sed q)"
-
-    [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]] && {
-      if [[ -d "$_search_result" ]];then
-        kill_music
-        2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
-        set_status
-
-      elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
-        kill_music
-        2>/dev/null 1>&2 mpg321 "$_search_result" &
-        set_status
-
-      elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
-        playlist_file="$_search_result"
-
-        kill_music
-        2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
-        set_status
-
+    [[ "$_search_result" == "$XDG_MUSIC_DIR/"* ]] && {
+      kill_music
+      if [ -d "$_search_result" ];then
+        play "$_search_result" -B --shuffle
       else
-        _search_result="$(locate -qt "$cmd_reply" | sed q)"
-
-        [[ "$_search_result" = "$XDG_MUSIC_DIR/"* ]] && {
-          if [[ -d $_search_result ]]; then
-            kill_music
-            2>/dev/null 1>&2 mpg321 "$_search_result" -B --shuffle &
-            set_status
-
-          elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.mp3 ]]; then
-            kill_music
-            2>/dev/null 1>&2 mpg321 "$_search_result" &
-            set_status
-
-          elif [[ "$_search_result" = "$XDG_MUSIC_DIR/"*.list ]]; then
+        case $_search_result in
+          "$XDG_MUSIC_DIR/"*.mp3)
+            play "$_search_result"
+            ;;
+          "$XDG_MUSIC_DIR/"*.list)
             playlist_file="$_search_result"
-
-            kill_music
-            2>/dev/null 1>&2 mpg321 --list "$playlist_file" --shuffle &
-            set_status
-          fi
-        }
+            play --list "$playlist_file" --shuffle
+            ;;
+        esac
       fi
-    }
 
-    unset set_status
+      paused=false
+      started=$(date +%s%3N)
+    }
     refresh
   }
 }
@@ -825,7 +813,7 @@ search_in_dir () {
 mute_or_unmute () {
   2>/dev/null 1>&2 amixer -D pulse sset Master toggle
   [ -n "$(amixer -D pulse get Master | awk '/\[off\]/')" ] &&
-    IS_MUTED=true || IS_MUTED=false
+    muted=true || muted=false
 
   status_line
 }
@@ -835,6 +823,7 @@ set_volume () {
   # if cmd_reply is between 0 & 100
   if [[ "$cmd_reply" -ge 0 ]] && [[ "$cmd_reply" -le 100 ]]; then
     2>/dev/null 1>&2 amixer -D pulse sset Master "${cmd_reply}%"
+    info "volume set to ${cmd_reply}%"
   fi
 
   status_line
@@ -875,30 +864,33 @@ go_to_child () {
   kill_music
 
   case "${list[scroll]}" in
-    *.mp3)  2>/dev/null 1>&2 mpg321 "${list[scroll]}" & ;;
-    *.list) 2>/dev/null 1>&2 mpg321 --list "${list[scroll]}" --shuffle & ;;
-    */ALL)  2>/dev/null 1>&2 mpg321 "$XDG_MUSIC_DIR" -B & ;;
+    *.mp3)  play "${list[scroll]}" ;;
+    *.list) play --list "${list[scroll]}" --shuffle ;;
+    */ALL)  play "$XDG_MUSIC_DIR" -B ;;
   esac
 
-  PAUSED=false; STARTED=$(date +%s%3N)
+  paused=false; started=$(date +%s%3N)
 
   refresh
 }
 
 go_to_parent () {
   # If a search was done, clear the results and open the current dir
-  if ((search == 1 && search_end_early != 1)); then
+  ((search == 1 && search_end_early != 1)) && {
     open "$PWD"
+    return
+  }
 
   # If '$PWD' is not $XDG_MUSIC_DIR or a subdirectory
   # of, don't go to parent
-  elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/.playlists" ]]; then
-    find_previous=1
-    open "${PWD%/*}"
-  elif [[ "$PWD" == *"${XDG_MUSIC_DIR}/"* ]]; then
-    find_previous=1
-    open "${PWD%/*}"
-  fi
+  case $PWD in
+    *"${XDG_MUSIC_DIR}/.playlists") : ;;
+    *"${XDG_MUSIC_DIR}/"*) : ;;
+    *) return ;;
+  esac
+
+  find_previous=1
+  open "${PWD%/*}"
 }
 
 scroll_down () {
@@ -942,9 +934,9 @@ jump_up () {
 }
 
 toggle_hidden_files () {
-  # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'.
+  # 'a=a>0?0:++a': Toggle between both values of 'shopt_flags'. {{{
   #                This also works for '3' or more values with
-  #                some modification.
+  #                some modification. }}}
   shopt_flags=(u s)
   shopt -"${shopt_flags[((a=a>0?0:++a))]}" dotglob
   redraw full
@@ -965,7 +957,7 @@ key_switch () {
 
     # Quick Nav
     ~|0) open "$XDG_MUSIC_DIR" ;;
-    [1-9]) favorite="SHORTCUT_${1}"; favorite="${!favorite}"; open "$favorite" ;;
+    [1-9]) local _fav; _fav="SHORTCUT_${1}"; open "${!_fav}" ;;
     f) find_current_song ;;
 
     # Music Controls
@@ -1059,7 +1051,7 @@ teardown () {
   exit 0
 }
 
-init () {
+main () {
   set -o pipefail
 
   # Locate & remember commands invoked by functions as functions are defined.
@@ -1151,4 +1143,4 @@ init () {
   main_event_loop
 }
 
-init "$@"
+main "$@"
