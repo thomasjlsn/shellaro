@@ -7,7 +7,7 @@
 #                                                         #
 ###########################################################
 
-VERSION="1.6.0"
+VERSION="1.6.1"
 
 # CONFIG
 #{{{
@@ -68,6 +68,14 @@ export INCREMENT_VOLUME=5
 
 # Error Logging
 ERROR_LOG_FILE="${XDG_CACHE_HOME}/shellaro/error_log"
+
+info () {
+  >&2 echo "[INFO]    $*" >> "$ERROR_LOG_FILE"
+}
+
+warning () {
+  >&2 echo "[WARNING] $*" >> "$ERROR_LOG_FILE"
+}
 
 error () {
   echo "[ERROR]   $*" \
@@ -204,7 +212,8 @@ format_line () {
 
 get_term_size () {
   #read -r LINES COLUMNS < <(stty size)
-  shopt -s checkwinsize; (:;:)
+  shopt -s checkwinsize; (:;:) ||
+    error "checkwinsize failed"
 
   # Max list items that fit in the scroll area
   # Leave 2 lines at the bottom for status & cmd line
@@ -496,20 +505,11 @@ cmd_line () {
   # Unset tab completion
   unset comp c
 
+  # escapes {{{
   # '\e[2K':   Clear the entire cmd_line on finish.
   # '\e[?25l': Hide the cursor.
-  # '\e8':     Restore cursor position.
+  # '\e8':     Restore cursor position. }}}
   printf "\e[2K\e[?25l\e8"
-}
-
-open () {
-  [ -d "${1}"/ ] && {
-    search=
-    search_end_early=
-    export previous_dir="$PWD"
-    cd "${1:-/}" ||:
-    redraw full
-  }
 }
 
 mark () {
@@ -851,24 +851,25 @@ execute_command () {
   cmd_line ":"
 
   case "${cmd_reply}" in
-    quit|exit) exit 0 ;;
-    # Vim problems...
-    q|qa)      exit 0 ;;
-    wq|wqa)    exit 0 ;;
     add)       add_marked_to_playlist ;;
     rm|remov*) delete_playlist ;;
     del*)      delete_playlist ;;
     kill)      kill_music ;;
     stop|stpo) kill_music ;;
     pause)     pause_or_play ;;
+    puase)     pause_or_play ;;
     play)      pause_or_play ;;
     search*)   search_in_dir ;;
     current*)  find_current_song ;;
     now*)      find_current_song ;;
     find*)     find_current_song ;;
-    locate*)   find_and_play ;;
+    locate*)   find_and_play || error "find_and_play failed" ;;
     *list*)    open "${XDG_MUSIC_DIR}"/.playlists ;;
     home)      open "${XDG_MUSIC_DIR}" ;;
+    quit|exit) exit 0 ;;
+    # Vim problems...
+    q|qa)      exit 0 ;;
+    wq|wqa)    exit 0 ;;
   esac
 }
 
@@ -1054,7 +1055,8 @@ teardown () {
 
   2>/dev/null kill -SIGTERM \
     "$(2>/dev/null awk 'NR==1{print}' \
-    "${XDG_CACHE_HOME}/shellaro/daemon_pid")"
+    "${XDG_CACHE_HOME}/shellaro/daemon_pid")" || \
+    error "failed to kill background_status_loop"
 
   [[ "$DEBUG" == true ]] && {
     set +x
@@ -1145,6 +1147,8 @@ init () {
   open "${XDG_MUSIC_DIR}" || fatal "could not open XDG_MUSIC_DIR"
 
   get_term_size && setup_terminal
+  info "a new instance was spawned"
+
   redraw full
   status_line
 
