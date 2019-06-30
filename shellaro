@@ -85,27 +85,24 @@ fatal () {
 }
 
 get_args () {
-  while [[ "$1" ]]; do
+  while (( "$#" )); do
     case "$1" in
       "-v"|"--version")
         printf "shellaro %s\n" "$VERSION"
         exit
-      ;;
+        ;;
 
       "-d"|"--debug")
-        [ "$2" ] && {
-          case "$2" in
-            "x")
-              strace -qqfe execve ~/GitHub/shellaro/shellaro "$0"
-              exit
-            ;;
-          esac
-        }
-
+        warning "debug mode started"
         set -x
         DEBUG=true
-      ;;
+        ;;
 
+      "-t"|"--trace")
+        warning "trace started"
+        strace -qqfe execve ~/GitHub/shellaro/shellaro "$0"
+        exit
+        ;;
     esac
     shift
   done
