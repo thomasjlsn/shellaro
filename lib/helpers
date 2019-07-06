@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+
+__helpers_check_dependencies () {
+  declare -a dependencies=(
+    "amixer"
+    "awk"
+    "dirname"
+    "mpg321"
+    "pgrep"
+    "readlink"
+  )
+
+  for dep in "${dependencies[@]}"; do
+    [ "$(which "$dep")" ] || {
+      >&2 printf "%s depends on %s, is it installed?\n" "$0" "$dep"
+      __logging_fatal "dependency check failed"
+    }
+  done
+}
+
+
+__helpers_make_program_dirs () {
+  declare -a program_dirs=(
+    "$XDG_MUSIC_DIR/.playlists"
+    "$__CACHE__"
+  )
+
+  for dir in "${program_dirs[@]}"; do
+    command mkdir -p "$dir" || exit 1
+  done
+}
+
+
+__helpers_make_program_files () {
+  declare -a program_files=(
+    "$XDG_MUSIC_DIR/.playlists/ALL"
+    "$__CACHE__/playlist"
+    "$__CACHE__/$__APP__.log"
+    "$__CACHE__/bg_pid"
+    "$__CACHE__/now_playing"
+  )
+
+  for file in "${program_files[@]}"; do
+    command touch "$file" || exit 1
+  done
+}
+
+
+__helpers_clear_cache () {
+  echo "" > "$__CACHE__/now_playing"
+  echo "" > "$__CACHE__/playlist"
+  echo "" > "$__CACHE__/bg_pid"
+}
+
+__helpers_usage () {
+  printf "%s" "\
+$__APP__ - version $__VERSION__
+
+Usage: $__APP__ [arguments]
+
+Arguments:
+   -h            Display this help message and exit
+   --help
+
+   -d            Enable debug mode (writes to $__CACHE__/$__APP__.log)
+   --debug
+
+   -v            Print version and exit
+   --version
+
+   -x            Set -x
+
+Report bugs to https://github.com/thomasjlsn/shellaro/issues
+
+"
+  exit 1
+}

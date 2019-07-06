@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+
+
+__strictmode_strict () {
+  set -e
+  set -u
+  set -o pipefail
+
+  return 0
+}
+
+
+__strictmode_light () {
+  set +e
+  set +u
+  set -o pipefail
+
+  return 0
+}
+
+
+__strictmode_off () {
+  set +e
+  set +u
+  set +o pipefail
+
+  return 0
+}
+
+
+__strictmode_set_ifs () {
+  export __OLDIFS__="$IFS"
+  IFS=$'\n\t'
+
+  return 0
+}
+
+
+__strictmode_reset_ifs () {
+  export IFS="$__OLDIFS__"
+
+  return 0
+}

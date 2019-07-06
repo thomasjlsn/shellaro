@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+
+__debug_enable () {
+  __logging_info "debug mode enabled"
+  export __DEBUG__=0
+
+  return 0
+}
+
+
+__debug_disable () {
+  [[ "$__DEBUG__" == 0 ]] &&
+    __logging_info "debug mode disabled"
+  set +x
+  export __DEBUG__=1
+
+  return 0
+}
