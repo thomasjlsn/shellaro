@@ -450,8 +450,7 @@ status_line () {
     _color="$COLOR_MUTED"
   else
     _volume="$(2>/dev/null amixer -D pulse get Master \
-      | awk '/Left:/' \
-      | awk -F '[\[\]]' '{print $2"  "}' \
+      | awk -F '[\[\]]' 'NR==6{print $2"  "}' \
       | cut -c 1-4 \
       || __logging_error "volume pipe has failed")"
   fi
