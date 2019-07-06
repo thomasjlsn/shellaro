@@ -379,25 +379,27 @@ music_pause () {
 
 music_next () {
   local _mpg321_pid
-  local _min_age
+  local _min_elapsed_time
   local _keypress
-  local _age
+  local _elapsed_time
 
   _mpg321_pid=$(pgrep mpg321)
-  _min_age=1050 # milliseconds
+  _min_elapsed_time=1050 # in milliseconds
   _keypress=$(date +%s%3N)
-  _age="(($_keypress-$started))"
+  _elapsed_time=$(( _keypress - started ))
 
   [ -n "$_mpg321_pid" ] && {
-    # Don't allow the user to skip to the next song within the first second,
-    # otherwise mpg321 is killed
-    [[ "$_age" -ge "$_min_age" ]] && {
+    # Don't allow the user to skip to the next song within
+    # the first second, otherwise mpg321 is killed
+    (( _elapsed_time >= _min_elapsed_time )) && {
       [[ $(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status") == "T" ]] && {
+        # Continue mpg321 process if stopped. Sending
+        # a SIGINT while stopped kills mpg321
         send_sig CONT mpg321
         paused=1
       }
 
-      # A single SIGINT (ctrl-c) to mpg321 goes to the next song
+      # A single SIGINT sent to mpg321 while running goes to the next song
       send_sig SIGINT mpg321
       started=$(date +%s%3N)
 
@@ -824,9 +826,7 @@ find_and_play () {
         music_start "$_search_result" -B --shuffle
       else
         case $_search_result in
-          "$XDG_MUSIC_DIR/"*.mp3)
-            music_start "$_search_result"
-            ;;
+          "$XDG_MUSIC_DIR/"*.mp3) music_start "$_search_result" ;;
           "$XDG_MUSIC_DIR/"*.list)
             playlist_file="$_search_result"
             music_start --list "$playlist_file" --shuffle
