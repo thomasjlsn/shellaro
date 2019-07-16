@@ -13,7 +13,7 @@ __helpers_check_dependencies () {
 
   for dep in "${dependencies[@]}"; do
     [ "$(which "$dep")" ] || {
-      >&2 printf "%s depends on %s, is it installed?\n" "$0" "$dep"
+      >&2 printf "%s depends on %s, is it installed?\n" "$__APP__" "$dep"
       __logging_fatal "dependency check failed"
     }
   done
@@ -47,11 +47,28 @@ __helpers_make_program_files () {
 }
 
 
+__helpers_install () {
+  __logging_info "runnning installer"
+  __helpers_check_dependencies && {
+    __helpers_make_program_dirs &&
+    __helpers_make_program_files
+  }
+  __logging_info "installation sucessful"
+  2>/dev/null 1>&2 touch "$__CACHE__/installed"
+}
+
+
 __helpers_clear_cache () {
   echo "" > "$__CACHE__/now_playing"
   echo "" > "$__CACHE__/playlist"
   echo "" > "$__CACHE__/bg_pid"
 }
+
+
+# __helpers_prune_log () {
+# TODO rm debug/info and leave fatal/error if log is larger than n
+# }
+
 
 __helpers_usage () {
   printf "%s" "\
@@ -66,10 +83,12 @@ Arguments:
    -d            Enable debug mode (writes to $__CACHE__/$__APP__.log)
    --debug
 
-   -v            Print version and exit
-   --version
+   -v            Verbose output (set -x)
+   -x
+   --verbose
 
-   -x            Set -x
+   -V            Print version and exit
+   --version
 
 Report bugs to https://github.com/thomasjlsn/shellaro/issues
 

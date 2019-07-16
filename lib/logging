@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 
 
-export __LOG__="$__CACHE__/$__APP__.log"
-
-
 __logging_debug () {
   [[ "$__DEBUG__" == 0 ]] && {
     >&2 printf "[DEBUG]   %s  %s\n" \
