@@ -356,7 +356,7 @@ music_toggle_pause () {
 
   local _mpg321_status
 
-  _mpg321_status=$(2>/dev/null awk 'NR==3{print $2}' "/proc/${_mpg321_pid}/status")
+  _mpg321_status=$(2>/dev/null awk '/^State/ {print $2}' "/proc/${_mpg321_pid}/status")
 
   case $_mpg321_status in
     "S")
